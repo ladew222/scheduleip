@@ -9,6 +9,12 @@ $(document).ready(function () {
     const rowContainer = document.querySelector('#class-table-body'); // Replace with your table body's ID
     const rowDragula = dragula([rowContainer]);
 
+    rowDragula.on('drag', (el) => {
+        // Add the 'dragging' class to the dragged element
+        el.classList.add('dragging');
+    });
+    
+
     rowDragula.on('drop', (el, target, source, sibling) => {
         const sectionTitle = el.dataset.sectionTitle;
 

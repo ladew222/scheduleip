@@ -1,3 +1,8 @@
 .custom-select-width {
     width: 300px; /* Adjust the width as needed */
 }
+
+.dragging {
+    background-color: lightblue;
+    opacity: 0.7;
+}
