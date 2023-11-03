@@ -56,7 +56,7 @@
             </thead>
             <tbody id="class-table-body">
                 {% for class_section in class_sections %}
-                    <tr class="class-row draggable-row" data-section-title="{{ class_section.section }}">
+                    <tr class="class-row draggable-row" data-tags="" data-section-title="{{ class_section.section }}">
                         <td>{{ class_section.term }}</td>
                         <td>{{ class_section.section }}</td>
                         <td>{{ class_section.title }}</td>
@@ -93,18 +93,7 @@
             <p>No data available for the current file</p>
         {% endif %}
             
-        <!-- Drop area for classes -->
-        <div id="drop-area" class="mt-5 p-3 border">
-            <h5>Drop Here to Set Constraints</h5>
-            <!-- Dropped classes will appear here as tags -->
-        </div>
-        
-        <!-- Drop area for user-generated restrictions -->
-        <div id="drop-area-restrictions" class="mt-5 p-3 border">
-            <h5>Drop Here to Add Restrictions</h5>
-            <!-- Dropped classes will appear here as tags -->
-        </div>
-
+    
         <!-- Display Optimization Results (Initially hidden) -->
         <div id="optimization-results" style="display: none;">
             <h2>Optimization Results</h2>

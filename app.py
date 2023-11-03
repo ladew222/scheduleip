@@ -4,7 +4,8 @@ import re
 import csv
 import json
 from io import StringIO
-from werkzeug.urls import url_encode
+from urllib.parse import urlencode
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -89,12 +90,15 @@ def create_meeting_times():
 def process_uploaded_data(uploaded_file_data):
     class_sections = []
 
-    # Assuming that the uploaded data is in CSV format
+    # Create a DataFrame from the uploaded data
     try:
-        # Parse the CSV data
-        csv_data = csv.DictReader(StringIO(uploaded_file_data))
+        df = pd.read_csv(StringIO(uploaded_file_data))
 
-        for row in csv_data:
+        # Convert specific columns to numeric data type if needed
+        numeric_columns = ['Credits']
+        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
+
+        for index, row in df.iterrows():
             class_section = ClassSection(
                 row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
                 row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
@@ -103,10 +107,11 @@ def process_uploaded_data(uploaded_file_data):
             class_sections.append(class_section)
 
     except Exception as e:
-        # Handle any exceptions that may occur during CSV parsing
+        # Handle any exceptions that may occur during parsing
         print(f"Error processing CSV data: {str(e)}")
 
     return class_sections
+
 
 
 # Define your ClassSection class here (with attributes and methods)
@@ -122,7 +127,7 @@ class ClassSection:
         self.status = status
         self.credits = float(credits)
         self.academic_level = academic_level
-        self.restrictions = restrictions.strip().split(', ') if restrictions else []  # Extract restrictions as a list
+
 
         # List of classes to avoid
         self.avoid_classes = []
