@@ -13,7 +13,15 @@ $(document).ready(function () {
         // Add the 'dragging' class to the dragged element
         el.classList.add('dragging');
     });
+    rowDragula.on('dragenter', (el, target, source, sibling) => {
+        // Add the 'target-row' class to the potential drop target row
+        target.classList.add('target-row');
+    });
     
+    rowDragula.on('dragleave', (el, target, source, sibling) => {
+        // Remove the 'target-row' class from the previous target row when leaving
+        target.classList.remove('target-row');
+    });
 
     rowDragula.on('drop', (el, target, source, sibling) => {
         const sectionTitle = el.dataset.sectionTitle;
