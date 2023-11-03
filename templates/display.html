@@ -1,82 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Class Scheduler</title>
-    <!-- Include Bootstrap CSS -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Class Scheduler</title>
+        
+        <!-- Include Bootstrap CSS -->
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+        
+        <!-- Include jQuery and jQuery UI -->
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+        
+        <!-- Include Dragula -->
+        <script src="https://rawgit.com/bevacqua/dragula/master/dist/dragula.js"></script>
+        
+        <!-- Include Tagify CSS and JavaScript -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.3.0/tagify.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.3.0/tagify.min.js"></script>
     
-    <!-- Include jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    
-    <!-- Include jQuery UI -->
-    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
-    
-    <!-- Include your custom JavaScript file -->
-    <script src="{{ url_for('static', filename='custom.js') }}"></script>
-</head>
+        <!-- Include your updated custom JavaScript file -->
+        <script src="{{ url_for('static', filename='custom.js') }}"></script>
+    </head>
 <body>
     <div class="container mt-5">
         <h2>Class Scheduler</h2>
+        
+        <!-- Apply Constraints and Optimize Button -->
         <button id="apply-constraints" class="btn btn-primary">Apply Constraints & Optimize</button>
-        <div class="form-group mt-3">
-            <label for="prefix-selector">Select Prefix to Penalize:</label>
-            <select id="prefix-selector" class="form-control">
-                <!-- Add prefix options here -->
-            </select>
-        </div>
-        <div class="form-group mt-3">
-            <label>Timeslots to Avoid:</label>
-            <!-- Add timeslot options here -->
-        </div>
-        {% if data %}
-            <table class="table mt-3">
-                <thead>
-                    <tr>
-                        <th>Term</th>
-                        <th>Section</th>
-                        <th>Title</th>
-                        <th>Location</th>
-                        <th>Meeting Info</th>
-                        <th>Faculty</th>
-                        <th>Available/Capacity</th>
-                        <th>Status</th>
-                        <th>Credits</th>
-                        <th>Academic Level</th>
-                        <th>Restrictions</th>
+ 
+        <!-- Display the class data -->
+        {% if class_sections %}
+        <table class="table mt-3" >
+            <thead>
+                <tr>
+                    <th>Term</th>
+                    <th>Section</th>
+                    <th>Title</th>
+                    <th>Location</th>
+                    <th>Meeting Info</th>
+                    <th>Faculty</th>
+                    <th>Available/Capacity</th>
+                    <th>Status</th>
+                    <th>Credits</th>
+                    <th>Academic Level</th>
+                    <th>Restrictions</th> <!-- Add an empty column for Restrictions -->
+                    <th>Blocked Time Slots</th> <!-- Add an empty column for Blocked Time Slots -->
+                </tr>
+            </thead>
+            <tbody id="class-table-body">
+                {% for class_section in class_sections %}
+                    <tr class="class-row draggable-row" data-section-title="{{ class_section.section }}">
+                        <td>{{ class_section.term }}</td>
+                        <td>{{ class_section.section }}</td>
+                        <td>{{ class_section.title }}</td>
+                        <td>{{ class_section.location }}</td>
+                        <td>{{ class_section.meeting_info }}</td>
+                        <td>{{ class_section.faculty }}</td>
+                        <td>{{ class_section.capacity }}</td>
+                        <td>{{ class_section.status }}</td>
+                        <td>{{ class_section.credits }}</td>
+                        <td>{{ class_section.academic_level }}</td>
+                        <td>
+                            <!-- Add tags for Restrictions here -->
+                            <!-- Example using Tagify (you can customize this): -->
+                            <input type="text" class="tagify" placeholder="Add Restrictions" data-whitelist="" data-enforce-whitelist="true">
+                        </td>
+                        <td>
+                            <select class="form-control blocked-times-select" multiple size="3" width="444">
+                                <!-- Add options for blocked time slots here -->
+                                {% for time_data in your_meeting_time_data %}
+                                    <option>{{ time_data.days }} {{ time_data.start_time }} - {{ time_data.end_time }}</option>
+                                {% endfor %}
+                            </select>
+                            
+                        </td>
                     </tr>
-                </thead>
-                <tbody>
-                    <!-- Parse the JSON data here -->
-                    
-                    {% for class_data in data %}
-                    <tr class="class-row" data-class-id="{{ class_data['Section'] }}">
-                        <td>{{ class_data['Term'] }}</td>
-                        <td>{{ class_data['Section'] }}</td>
-                        <td>{{ class_data['Title'] }}</td>
-                        <td>{{ class_data['Location'] }}</td>
-                        <td>{{ class_data['Meeting Info'] }}</td>
-                        <td>{{ class_data['Faculty'] }}</td>
-                        <td>{{ class_data['Available/Capacity'] }}</td>
-                        <td>{{ class_data['Status'] }}</td>
-                        <td>{{ class_data['Credits'] }}</td>
-                        <td>{{ class_data['Academic Level'] }}</td>
-                        <td>{{ class_data['Restrictions'] }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                {% endfor %}
+            </tbody>
+        </table>
         {% else %}
             <p>No data available for the current file</p>
         {% endif %}
-
-
-
+            
         <!-- Drop area for classes -->
         <div id="drop-area" class="mt-5 p-3 border">
-            <h5>Drop Here to Block or Set Constraint</h5>
+            <h5>Drop Here to Set Constraints</h5>
+            <!-- Dropped classes will appear here as tags -->
+        </div>
+        
+        <!-- Drop area for user-generated restrictions -->
+        <div id="drop-area-restrictions" class="mt-5 p-3 border">
+            <h5>Drop Here to Add Restrictions</h5>
+            <!-- Dropped classes will appear here as tags -->
+        </div>
+
+        <!-- Display Optimization Results (Initially hidden) -->
+        <div id="optimization-results" style="display: none;">
+            <h2>Optimization Results</h2>
+            <!-- Display optimization results here -->
+            <ul id="results-list">
+                <!-- Results will be added here using JavaScript -->
+            </ul>
         </div>
     </div>
 </body>

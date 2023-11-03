@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 import pulp
 import re
 import csv
-
+import json
+from io import StringIO
 
 app = Flask(__name__)
 
@@ -84,6 +85,27 @@ def create_meeting_times():
     return MeetingTimes(your_meeting_time_data)
 
 
+def process_uploaded_data(uploaded_file_data):
+    class_sections = []
+
+    # Assuming that the uploaded data is in CSV format
+    try:
+        # Parse the CSV data
+        csv_data = csv.DictReader(StringIO(uploaded_file_data))
+
+        for row in csv_data:
+            class_section = ClassSection(
+                row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
+                row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
+                row['Academic Level'], row['Restrictions']
+            )
+            class_sections.append(class_section)
+
+    except Exception as e:
+        # Handle any exceptions that may occur during CSV parsing
+        print(f"Error processing CSV data: {str(e)}")
+
+    return class_sections
 
 
 # Define your ClassSection class here (with attributes and methods)
@@ -149,6 +171,32 @@ class MeetingTimes:
             time_blocks = ["11:00AM - 12:20PM", "12:30PM - 1:50PM", "2:00PM - 3:20PM", "3:30PM - 4:50PM"]
 
         return time_blocks
+# Function to create ClassSection objects from data
+def create_class_sections_from_data(class_sections_data):
+    class_sections = []
+    for section_data in class_sections_data:
+        # Extract data from 'section_data' and create a ClassSection object
+        term = section_data.get('term', '')
+        section = section_data.get('section', '')
+        title = section_data.get('title', '')
+        location = section_data.get('location', '')
+        meeting_info = section_data.get('meetingInfo', '')
+        faculty = section_data.get('faculty', '')
+        capacity = section_data.get('capacity', '')
+        status = section_data.get('status', '')
+        credits = section_data.get('credits', '')
+        academic_level = section_data.get('academicLevel', '')
+        restrictions = section_data.get('restrictions', '')
+        
+        class_section = ClassSection(term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level, restrictions)
+        class_sections.append(class_section)
+
+    return class_sections
+
+
+
+
+
 
 
 def update_class_sections_with_schedule(class_sections, class_timeslots, meeting_times):
@@ -258,8 +306,64 @@ def optimize_schedule(class_sections, meeting_times):
     # Now, class_sections contain the final schedule information based on the optimization results.
     return class_sections
 
+# Define the '/optimize' route to handle optimization requests
+@app.route('/optimize', methods=['POST'])
+def optimize():
+    # Get the JSON data from the request
+    data = request.get_json()
+
+    # Extract selected constraints and user changes
+    constraints = data.get('constraints', [])
+    user_changes = data.get('userChanges', {})
+
+    # Extract class section data from the 'data' variable
+    class_sections_data = data.get('classSections', [])
+    
+    # Convert the class section data to ClassSection objects
+    class_sections = create_class_sections_from_data(class_sections_data)
+
+    # Create a MeetingTimes object
+    meeting_times = create_meeting_times()
+
+    # Optimize the schedule based on the received data
+    optimized_class_sections = optimize_schedule(class_sections, meeting_times, constraints, user_changes)
+
+    # Prepare the optimization results
+    optimization_results = {
+        'message': 'Optimization complete',
+        'results': optimized_class_sections,
+    }
+
+    return jsonify(optimization_results)
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload():
+    uploaded_file_data = None
+    class_sections = None
+
+    if request.method == 'POST':
+        # Check if a file was uploaded
+        if 'file' not in request.files:
+            return redirect(request.url)
+
+        file = request.files['file']
+
+        # Check if the file is empty
+        if file.filename == '':
+            return redirect(request.url)
+
+        if file:
+            # Save the uploaded file data
+            uploaded_file_data = file.read().decode('utf-8')
+            # Process the uploaded file data to create class_sections
+            class_sections = process_uploaded_data(uploaded_file_data)
+
+    return render_template('display.html', uploaded_file_data=uploaded_file_data, class_sections=class_sections, your_meeting_time_data=create_meeting_times().meeting_times)
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    uploaded_file_data = None
+
     if request.method == 'POST':
         # Check if a file was uploaded
         if 'file' not in request.files:
@@ -272,52 +376,11 @@ def index():
             return redirect(request.url)
 
         if file:
-            # Save the uploaded file to a temporary location (you can change this as needed)
-            file_path = '/tmp/uploaded_schedule.csv'
-            file.save(file_path)
+            # Save the uploaded file data
+            uploaded_file_data = file.read().decode('utf-8')
 
-            # Read CSV and create ClassSection objects
-            class_sections = read_csv_and_create_class_sections(file_path)
+    return render_template('index.html', uploaded_file_data=uploaded_file_data)
 
-            # Create a MeetingTimes object based on your meeting time data
-            # Replace the following line with your actual meeting time data
-            your_meeting_time_data = create_meeting_times()  # Replace with your meeting time data
-            meeting_times = MeetingTimes(create_meeting_times())
-    return render_template('index.html')
-
-def index():
-    if request.method == 'POST':
-        # Check if a file was uploaded
-        if 'file' not in request.files:
-            return redirect(request.url)
-
-        file = request.files['file']
-
-        # Check if the file is empty
-        if file.filename == '':
-            return redirect(request.url)
-
-        if file:
-            # Save the uploaded file to a temporary location (you can change this as needed)
-            file_path = '/tmp/uploaded_schedule.csv'
-            file.save(file_path)
-
-            # Read CSV and create ClassSection objects
-            class_sections = read_csv_and_create_class_sections(file_path)
-
-            # Create a MeetingTimes object based on your meeting time data
-            # Replace the following line with your actual meeting time data
-            your_meeting_time_data = create_meeting_times()  # Replace with your meeting time data
-            meeting_times = MeetingTimes(create_meeting_times())
-
-            # Call the optimization function
-            optimize_schedule(class_sections, meeting_times)
-
-            # You can render a template to display the results or return them in JSON format, etc.
-            # For now, let's return a simple message
-            return "Optimization complete. Check the results!"
-
-    return render_template('index.html')
 
 
 if __name__ == "__main__":

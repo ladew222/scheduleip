@@ -1,48 +1,57 @@
 $(document).ready(function () {
     // Initialize an empty list to store selected constraints
-    const selectedConstraints = [];
-    
-    // Initialize an object to store user changes
-    const userChanges = {};
+    let selectedConstraints = [];
 
-    // Make the table rows draggable
-    $('.draggable-row').draggable({
-        helper: 'clone',  // Clone the row when dragging
-        opacity: 0.5,     // Set the opacity of the dragged row
-        revert: 'invalid', // Revert if not dropped in a valid target
+    // Initialize lists to store user-generated restrictions and blocked times
+    let userBlockedTimes = [];
+
+    // Initialize Tagify for the "Restrictions" field
+    const restrictionsField = document.querySelector('.tagify'); // Replace with the correct selector
+    const tagify = new Tagify(restrictionsField, {
+        // Configure Tagify as needed
     });
 
-    // Handle the "Move" button click event
-    $('.move-class').on('click', function () {
-        // Get the class ID and new time slot from the clicked row
-        const classId = $(this).closest('.class-row').data('class-id');
-        const newTimeSlot = '';  // Set the new time slot here
+    // Initialize drag-and-drop for rows using dragula
+    const rowContainer = document.querySelector('#class-table-body'); // Replace with your table body's ID
+    const rowDragula = dragula([rowContainer]);
 
-        // Store the user change in the userChanges object
-        userChanges[classId] = newTimeSlot;
+    rowDragula.on('drop', (el, target, source, sibling) => {
+        const sectionTitle = el.dataset.sectionTitle;
 
-        // Remove the row from the table
-        $(this).closest('.class-row').remove();
+        // Handle the drop event here
+        // Example: You can add a tag to the "Restrictions" field using the Tagify instance
+        tagify.addTags([sectionTitle]);
+
+        // Update user-generated restrictions
+        userBlockedTimes.push(sectionTitle);
     });
 
-    // Handle the "Hard Constraint" button click event
-    $('.hard-constraint').on('click', function () {
-        // Get the class ID from the clicked row
-        const classId = $(this).closest('.class-row').data('class-id');
+    // Handle the selection of blocked times
+    $('#timeslot-list .ui-selected').on('click', function () {
+        const selectedTime = $(this).text();
 
-        // Add the class ID to the selectedConstraints list with the "Hard Constraint" action
-        selectedConstraints.push({ id: classId, action: 'Hard Constraint' });
-
-        // Remove the row from the table
-        $(this).closest('.class-row').remove();
+        // Toggle the selection and update the UI
+        if ($(this).hasClass('blocked-time')) {
+            $(this).removeClass('blocked-time');
+            // Remove the time from the user-selected blocked times
+            userBlockedTimes = userBlockedTimes.filter(time => time !== selectedTime);
+        } else {
+            $(this).addClass('blocked-time');
+            // Add the time to the user-selected blocked times
+            userBlockedTimes.push(selectedTime);
+        }
     });
 
     // Handle the "Apply Constraints & Optimize" button click event
     $('#apply-constraints').on('click', function () {
-        // Send the selected constraints and user changes to the server for processing
+        // Collect the selected timeslots
+        const selectedTimeslots = $('#timeslot-list .ui-selected').map(function () {
+            return $(this).text();
+        }).get();
+
+        // Send the user-selected blocked times to the server for processing
         const requestData = {
-            constraints: selectedConstraints,
-            userChanges: userChanges,
+            userBlockedTimes: userBlockedTimes,
         };
 
         $.ajax({
@@ -53,11 +62,16 @@ $(document).ready(function () {
             success: function (response) {
                 // Handle the optimization results
                 // You can display the results on the page or perform any other actions
-                console.log(response);
+                console.log('Optimization successful:', response);
             },
             error: function (error) {
                 console.error('Error:', error);
             },
         });
     });
+
+    // Make the timeslot list selectable
+    $('#timeslot-list').selectable();
+
+    // Additional code for other interactions...
 });
