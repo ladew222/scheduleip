@@ -323,7 +323,7 @@ def optimize_schedule(class_sections, meeting_times):
     # Constraint 4: Penalize having too many classes in the same time block (encourage distribution)
     for day in ["MWF", "TTh"]:
         for start_time in meeting_times.choose_time_blocks(day, 3):
-            model += pulp.lpSum(class_timeslots[class_section.section, day, start_time] for class_section in class_sections) <= 2
+            model += pulp.lpSum(class_timeslots[class_section.section, day, start_time] for class_section in class_sections) <= 10
 
     # Constraint 5: Penalize classes that intersect and have one of each other in avoid_classes
     for class_section in class_sections:
@@ -331,7 +331,7 @@ def optimize_schedule(class_sections, meeting_times):
             if class_section != other_class_section and class_section.section in other_class_section.avoid_classes:
                 for day in ["MWF", "TTh"]:
                     for start_time in meeting_times.choose_time_blocks(day, class_section.credits):
-                        model += class_timeslots[class_section.section, day, start_time] + class_timeslots[other_class_section.section, day, start_time] <= 1
+                        model += class_timeslots[class_section.section, day, start_time] + class_timeslots[other_class_section.section, day, start_time] <= 3
     
     # Constraint 6: Avoid unwanted timeslots
     for class_section in class_sections:
