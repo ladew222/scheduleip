@@ -44,12 +44,14 @@
                     <th>Section</th>
                     <th>Title</th>
                     <th>Location</th>
-                    <th>Meeting Info</th>
+                    
                     <th>Faculty</th>
                     <th>Available/Capacity</th>
                     <th>Status</th>
                     <th>Credits</th>
                     <th>Academic Level</th>
+                    <th>Days</th>
+                    <th>Time Slot</th>
                     <th>Restrictions</th> <!-- Add an empty column for Restrictions -->
                     <th>Blocked Time Slots</th> <!-- Add an empty column for Blocked Time Slots -->
                 </tr>
@@ -61,12 +63,14 @@
                         <td>{{ class_section.section }}</td>
                         <td>{{ class_section.title }}</td>
                         <td>{{ class_section.location }}</td>
-                        <td>{{ class_section.meeting_info }}</td>
+                        <td style="display:none">{{ class_section.meeting_info }}</td>
                         <td>{{ class_section.faculty }}</td>
                         <td>{{ class_section.capacity }}</td>
                         <td>{{ class_section.status }}</td>
                         <td>{{ class_section.credits }}</td>
                         <td>{{ class_section.academic_level }}</td>
+                        <td>{{ class_section.days }}</td>
+                        <td>{{ class_section.time_slot }}</td>
                         <td>
                             <!-- Add tags for Restrictions here -->
                             <!-- Example using Tagify (you can customize this): -->

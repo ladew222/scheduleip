@@ -57,8 +57,8 @@ $(document).ready(function () {
         }
     }
 
-    // Handle changes to Tagify inputs (manual tag additions)
-    $('.tagify-input').on('change', function () {
+     // Delegated event handler for manual tag additions
+     $('#class-table-body').on('change', '.tagify-input', function () {
         updateDataTags(this);
     });
 
