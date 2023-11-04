@@ -29,6 +29,20 @@
         <script src="{{ url_for('static', filename='custom.js') }}"></script>
     </head>
 <body>
+     <!-- Create a menu -->
+     <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container">
+          <ul class="navbar-nav">
+            <li class="nav-item">
+              <button id="save-schedule" class="btn btn-link">Save Schedule</button>
+            </li>
+            <li class="nav-item">
+              <button id="load-schedule" class="btn btn-link">Load Schedule</button>
+            </li>
+          </ul>
+        </div>
+      </nav>
+
     <div class="container mt-5">
         <h2>Class Scheduler</h2>
         
@@ -69,8 +83,8 @@
                         <td>{{ class_section.status }}</td>
                         <td>{{ class_section.credits }}</td>
                         <td>{{ class_section.academic_level }}</td>
-                        <td>{{ class_section.days }}</td>
-                        <td>{{ class_section.time_slot }}</td>
+                        <td class="editable-cell days">{{ class_section.days }}</td>
+                        <td class="editable-cell time">{{ class_section.time_slot }}</td>
                         <td>
                             <!-- Add tags for Restrictions here -->
                             <!-- Example using Tagify (you can customize this): -->

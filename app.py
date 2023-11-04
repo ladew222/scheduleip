@@ -404,6 +404,22 @@ def upload():
 
     return render_template('display.html', uploaded_file_data=uploaded_file_data, class_sections=class_sections, your_meeting_time_data=create_meeting_times().meeting_times)
 
+
+@app.route('/load-schedule', methods=['GET'])
+def load_schedule():
+    # Read the CSV file and parse it into a list of dictionaries
+    csv_filename = 'your_schedule.csv'  # Adjust the filename
+    schedule_data = []
+
+    with open(csv_filename, 'r', newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            schedule_data.append(row)
+
+    # Send the parsed data as JSON
+    return jsonify(schedule_data)
+
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     uploaded_file_data = None
