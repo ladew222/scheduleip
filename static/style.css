@@ -1,12 +1,22 @@
 .custom-select-width {
-    width: 300px; /* Adjust the width as needed */
+    width: 130px; /* Adjust the width as needed */
+}
+.tagify {
+    width: 160px;  
 }
 
+/* Style for the dragged row */
 .dragging {
-    background-color: lightblue;
-    opacity: 0.7;
+    background-color: #f2f2f2; /* Change background color when dragging */
 }
 
+/* Style for the target row when dragged over */
 .target-row {
-    background-color: lightgray;
+    border-top: 2px solid #2196F3; /* Add a top border to indicate the target */
+}
+
+/* Style for the target row when dragged over */
+.target-row {
+    border-top: 2px solid #2196F3; /* Add a top border to indicate the target */
+    background-color: #e5f7ff; /* Highlight the target row with a background color */
 }
