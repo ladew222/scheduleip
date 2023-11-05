@@ -240,6 +240,8 @@ def create_class_sections_from_data(class_sections_data):
         credits = section_data.get('credits', '')
         academic_level = section_data.get('academicLevel', '')
         restrictions = section_data.get('restrictions', '')
+        days = section_data.get('days', '')
+        time_slot = section_data.get('timeSlot', '')
         
         class_section = ClassSection(term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level, restrictions)
         class_sections.append(class_section)

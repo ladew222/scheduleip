@@ -10,13 +10,3 @@
     background-color: #f2f2f2; /* Change background color when dragging */
 }
 
-/* Style for the target row when dragged over */
-.target-row {
-    border-top: 2px solid #2196F3; /* Add a top border to indicate the target */
-}
-
-/* Style for the target row when dragged over */
-.target-row {
-    border-top: 2px solid #2196F3; /* Add a top border to indicate the target */
-    background-color: #e5f7ff; /* Highlight the target row with a background color */
-}
