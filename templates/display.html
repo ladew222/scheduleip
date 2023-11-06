@@ -42,7 +42,7 @@
           </ul>
         </div>
       </nav>
-
+      <input id="file-input" type="file" name="name" style="display: none;" />
     <div class="container mt-5">
         <h2>Class Scheduler</h2>
         
@@ -58,7 +58,7 @@
                     <th>Section</th>
                     <th>Title</th>
                     <th>Location</th>
-                    
+                    <th>Meeting Info</th>
                     <th>Faculty</th>
                     <th>Available/Capacity</th>
                     <th>Status</th>
@@ -77,7 +77,7 @@
                         <td>{{ class_section.section }}</td>
                         <td>{{ class_section.title }}</td>
                         <td>{{ class_section.location }}</td>
-                        <td style="display:none">{{ class_section.meeting_info }}</td>
+                        <td>{{ class_section.meeting_info }}</td>
                         <td>{{ class_section.faculty }}</td>
                         <td>{{ class_section.capacity }}</td>
                         <td>{{ class_section.status }}</td>
