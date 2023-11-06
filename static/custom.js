@@ -6,30 +6,28 @@ $(document).ready(function () {
     $('.editable-cell').on('click', function () {
         const cell = $(this);
         const originalContent = cell.text().trim();
-
+    
         // Create an input field with the original content
         const inputField = $('<input type="text">');
         inputField.val(originalContent);
-
+    
         // Replace the cell's content with the input field
         cell.html(inputField);
-
+    
         // Focus on the input field
         inputField.focus();
-
-        // Add a blur event listener to save the edited content when the input field loses focus
+    
+        // Add a blur event listener to validate and save the edited content
         inputField.on('blur', function () {
             const editedContent = inputField.val().trim();
-
+    
             // Validate the edited content format based on the cell's class
-            if (cell.hasClass('days') && isValidDayFormat(editedContent)) {
-                // Handle day format validation (e.g., MWF or TTh)
-                cell.text(editedContent);
-            } else if (cell.hasClass('time') && isValidTimeFormat(editedContent)) {
-                // Handle time format validation (e.g., "09:05AM - 10:00AM")
+            if ((cell.hasClass('days') && isValidDayFormat(editedContent)) ||
+                (cell.hasClass('time') && isValidTimeFormat(editedContent))) {
+                // Handle day or time format validation
                 cell.text(editedContent);
             } else {
-                // Display an error message and keep the input field for further editing
+                // Display an error message and revert to the original content
                 inputField.addClass('error');
                 inputField.val(originalContent);
                 setTimeout(function () {
@@ -38,6 +36,19 @@ $(document).ready(function () {
             }
         });
     });
+    
+    // Function to validate day format
+    function isValidDayFormat(dayString) {
+        const dayRegex = /^(MWF|TTh)$/i; // Match "MWF" or "TTh" case-insensitively
+        return dayRegex.test(dayString);
+    }
+    
+    // Function to validate time format
+    function isValidTimeFormat(timeString) {
+        const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9][APap][Mm] - (0?[1-9]|1[0-2]):[0-5][0-9][APap][Mm]$/;
+        return timeRegex.test(timeString);
+    }
+    
 
     // Function to validate day format
     function isValidDayFormat(dayString) {
@@ -239,7 +250,7 @@ $(document).ready(function () {
             },
         });
     });
-
+    // Listen for "drop" event
     // Listen for "drop" event
     drake.on('drop', function (el, target, source, sibling) {
         // Remove the "target-row" class from the previously targeted row
@@ -256,22 +267,21 @@ $(document).ready(function () {
         var draggedSection = draggedRow.data('section-title');
         var droppedSection = droppedRow.data('section-title');
 
-        // Add the section name as a tag to both rows
+        // Add the section name as a tag to the other row
         var tagifyDragged = tagifyInstances[draggedSection];
         var tagifyDropped = tagifyInstances[droppedSection];
 
-        // Update the data-tags attribute of the rows
-        tagifyDragged.addTags([droppedSection]);
+        // Add the section name as a tag to both rows' Tagify instances
         tagifyDropped.addTags([draggedSection]);
+        tagifyDragged.addTags([droppedSection]);
+
+        // Optionally, you can update the data-tags attribute of both rows
+        //droppedRow.attr('data-tags', draggedSection);
+        //draggedRow.attr('data-tags', droppedSection);
     });
 
 
-    $('#save-schedule').on('click', saveSchedule);
 
-    // Handle loading table data from a CSV file
-    $('#load-table-button').on('click', function () {
-        $('#file-input').click();
-    });
 
 
     function saveSchedule() {
@@ -382,7 +392,7 @@ $(document).ready(function () {
         ];
 
         for (const rowData of data) {
-            const row = $('<tr>');
+            
 
             // Extract the fields from the rowData object
             const term = rowData.Term || '';
@@ -397,6 +407,8 @@ $(document).ready(function () {
             const academicLevel = rowData['Academic Level'] || '';
             const days = rowData.Days || '';
             const timeslot = rowData.Timeslot || '';
+
+            const row = $('<tr>').attr('data-section-name', section);
 
             // Split multivalued tags and restrictions using semicolons and trim spaces
             const restrictions = (rowData.Restrictions || '').split(';').map(tag => tag.trim());

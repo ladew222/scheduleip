@@ -103,36 +103,13 @@ def class_section_to_dict(class_section):
     }
     
     
-def process_uploaded_data(uploaded_file_data):
-    class_sections = []
 
-    # Create a DataFrame from the uploaded data
-    try:
-        df = pd.read_csv(StringIO(uploaded_file_data))
-
-        # Convert specific columns to numeric data type if needed
-        numeric_columns = ['Credits']
-        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
-
-        for index, row in df.iterrows():
-            class_section = ClassSection(
-                row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
-                row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
-                row['Academic Level'], row['Restrictions']
-            )
-            class_sections.append(class_section)
-
-    except Exception as e:
-        # Handle any exceptions that may occur during parsing
-        print(f"Error processing CSV data: {str(e)}")
-
-    return class_sections
 
 
 
 # Define your ClassSection class here (with attributes and methods)
 class ClassSection:
-    def __init__(self, term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level, restrictions):
+    def __init__(self, term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level, restrictions, blocked_time_slots):
         self.term = term
         self.section = section
         self.title = title
@@ -158,11 +135,23 @@ class ClassSection:
         
         # List of unwanted timeslots
         self.unwanted_timeslots = []
+        
+        # Add restrictions and blocked_time_slots to the lists
+        self.add_restrictions(restrictions)
+        self.add_unwanted_timeslots(blocked_time_slots)
 
         # Parse "Meeting Info" to extract MWF or TTh
         self.days = self.extract_days_from_meeting_info(meeting_info)
         self.time_slot = self.extract_time_slot_from_meeting_info(meeting_info)
 
+    def add_restrictions(self, restrictions):
+        # Split and add restrictions to the avoid_classes list
+        self.avoid_classes.extend(restrictions.split(';'))
+
+    def add_unwanted_timeslots(self, blocked_time_slots):
+        # Split and add blocked_time_slots to the unwanted_timeslots list
+        self.unwanted_timeslots.extend(blocked_time_slots.split(';'))
+        
     def extract_days_from_meeting_info(self, meeting_info):
         # Determine if it's MWF or TTh based on "Meeting Info" (you can modify this logic as needed)
         if "Monday, Wednesday, Friday" in meeting_info:
@@ -381,11 +370,37 @@ def optimize():
     return jsonify(optimization_results)
 
 
+    
+def process_uploaded_data(uploaded_file_data):
+    class_sections = []
 
-@app.route('/upload', methods=['GET', 'POST'])
+    # Create a DataFrame from the uploaded data
+    try:
+        df = pd.read_csv(StringIO(uploaded_file_data))
+
+        # Convert specific columns to numeric data type if needed
+        numeric_columns = ['Credits']
+        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
+
+        for index, row in df.iterrows():
+            class_section = ClassSection(
+                row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
+                row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
+                row['Academic Level'], row['Restrictions'], row['Blocked Time Slots'],
+            )
+            class_sections.append(class_section)
+
+    except Exception as e:
+        # Handle any exceptions that may occur during parsing
+        print(f"Error processing CSV data: {str(e)}")
+
+    return class_sections
+
+
 def upload():
     uploaded_file_data = None
     class_sections = None
+    file_format = None  # Initialize the format parameter
 
     if request.method == 'POST':
         # Check if a file was uploaded
@@ -404,7 +419,7 @@ def upload():
             # Process the uploaded file data to create class_sections
             class_sections = process_uploaded_data(uploaded_file_data)
 
-    return render_template('display.html', uploaded_file_data=uploaded_file_data, class_sections=class_sections, your_meeting_time_data=create_meeting_times().meeting_times)
+    return render_template('display.html', uploaded_file_data=uploaded_file_data, class_sections=class_sections, file_format=file_format, your_meeting_time_data=create_meeting_times().meeting_times)
 
 
 @app.route('/load-schedule', methods=['GET'])
