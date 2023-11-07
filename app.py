@@ -103,20 +103,15 @@ def class_section_to_dict(class_section):
     }
     
     
-
-
-
-
-# Define your ClassSection class here (with attributes and methods)
 class ClassSection:
-    def __init__(self, term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level, restrictions, blocked_time_slots):
+    def __init__(self, term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level,scheduled_day,scheduled_time, restrictions, blocked_time_slots):
         self.term = term
         self.section = section
         self.title = title
         self.location = location
         self.meeting_info = meeting_info
         self.faculty = faculty
-        #self.capacity = int(capacity)  # Extract the capacity as an integer
+        # self.capacity = int(capacity)  # Extract the capacity as an integer
         try:
             # Split the capacity value by '/' and take the first part
             capacity_parts = capacity.split('/')
@@ -126,32 +121,50 @@ class ClassSection:
             self.capacity = 0  # You can set a default value or handle it as needed
 
         self.status = status
-        self.credits = float(credits)
-        self.academic_level = academic_level
+        # Handle credits which could be a float or a string with a range
+        try:
+            self.credits = float(credits)
+        except ValueError:
+            # If there's a ValueError, it might be a string with a range, e.g., "1.00 - 12.0"
+            if isinstance(credits, str) and '-' in credits:
+                # Here, you can decide how to handle the range, for this example, we set it to 0
+                self.credits = 0
+            else:
+                # If it's another sort of string that can't be converted to float, also set to 0 or handle as needed
+                self.credits = 0
 
+        self.academic_level = academic_level
 
         # List of classes to avoid
         self.avoid_classes = []
-        
+
         # List of unwanted timeslots
         self.unwanted_timeslots = []
-        
+
+        # Only populate days and time_slot if they are not already set
+        if not hasattr(self, 'days'):
+            self.days = self.extract_days_from_meeting_info(meeting_info)
+        if not hasattr(self, 'time_slot'):
+            self.time_slot = self.extract_time_slot_from_meeting_info(meeting_info)
+
         # Add restrictions and blocked_time_slots to the lists
         self.add_restrictions(restrictions)
         self.add_unwanted_timeslots(blocked_time_slots)
 
-        # Parse "Meeting Info" to extract MWF or TTh
-        self.days = self.extract_days_from_meeting_info(meeting_info)
-        self.time_slot = self.extract_time_slot_from_meeting_info(meeting_info)
-
     def add_restrictions(self, restrictions):
-        # Split and add restrictions to the avoid_classes list
-        self.avoid_classes.extend(restrictions.split(';'))
+        # Check if restrictions is not None, is a string, and is not empty before splitting
+        if restrictions and isinstance(restrictions, str) and restrictions.strip():
+            # Split and add restrictions to the avoid_classes list
+            self.avoid_classes.extend(restrictions.split(';'))
 
     def add_unwanted_timeslots(self, blocked_time_slots):
-        # Split and add blocked_time_slots to the unwanted_timeslots list
-        self.unwanted_timeslots.extend(blocked_time_slots.split(';'))
-        
+        # Check if blocked_time_slots is not None, is a string, and is not empty before splitting
+        if blocked_time_slots and isinstance(blocked_time_slots, str) and blocked_time_slots.strip():
+            # Split and add blocked_time_slots to the unwanted_timeslots list
+            self.unwanted_timeslots.extend(blocked_time_slots.split(';'))
+
+
+
     def extract_days_from_meeting_info(self, meeting_info):
         # Determine if it's MWF or TTh based on "Meeting Info" (you can modify this logic as needed)
         if "Monday, Wednesday, Friday" in meeting_info:
@@ -169,6 +182,7 @@ class ClassSection:
             return time_pattern.group()
         else:
             return None
+
 
 class MeetingTimes:
     def __init__(self, your_meeting_time_data):
@@ -261,19 +275,51 @@ def update_class_sections_with_schedule(class_sections, class_timeslots, meeting
                     class_section.scheduled_day = day
                     class_section.scheduled_time = start_time
 
+# Create a list of ClassSection objects from the CSV data
+def read_csv_and_create_class_sections(csv_filename):
+    class_sections = []
+    try:
+        df = pd.read_csv(csv_filename)  # Read the CSV file with headers
+
+        for index, row in df.iterrows():
+            class_section = ClassSection(
+                row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
+                row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
+                row['Academic Level'], row['Restrictions'], row['Blocked Time Slots'],
+            )
+            class_sections.append(class_section)
+
+    except Exception as e:
+        # Handle any exceptions that may occur during parsing
+        print(f"Error processing CSV data: {str(e)}")
+
+    return class_sections
+
 
 
 # Create a list of ClassSection objects from the CSV data
-def read_csv_and_create_class_sections(csv_filename):
+def read_csv_and_create_class_sections_old(csv_filename):
     class_sections = []
     with open(csv_filename, 'r', newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             class_section = ClassSection(
-                row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
-                row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
-                row['Academic Level'], row['Restrictions']
+                term=row.get('Term', ''),
+                section=row.get('Section', ''),
+                title=row.get('Title', ''),
+                location=row.get('Location', ''),
+                meeting_info=row.get('Meeting Info', ''),
+                faculty=row.get('Faculty', ''),
+                capacity=row.get('Available/Capacity', '').split('/')[0].strip(),  # Only pass the available part
+                status=row.get('Status', ''),
+                credits=row.get('Credits', ''),
+                academic_level=row.get('Academic Level', ''),
+                scheduled_day=row.get('Days', ''),  # assuming 'Days' is the correct column name
+                scheduled_time=row.get('Time Slot', ''),  # assuming 'Time Slot' is the correct column name
+                restrictions=row.get('Restrictions', ''),
+                blocked_time_slots=row.get('Blocked Time Slots', '')
             )
+
             class_sections.append(class_section)
     return class_sections
 
@@ -370,33 +416,43 @@ def optimize():
     return jsonify(optimization_results)
 
 
-    
 def process_uploaded_data(uploaded_file_data):
     class_sections = []
 
-    # Create a DataFrame from the uploaded data
+    # Attempt to create a DataFrame from the uploaded data
     try:
         df = pd.read_csv(StringIO(uploaded_file_data))
+        # If necessary, convert columns to numeric
+        # numeric_columns = ['Credits']
+        # df[numeric_columns] = pd.to_numeric(df[numeric_columns], errors='coerce')
 
-        # Convert specific columns to numeric data type if needed
-        numeric_columns = ['Credits']
-        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
-
-        for index, row in df.iterrows():
+        # Process each row to create ClassSection objects
+        for _, row in df.iterrows():
             class_section = ClassSection(
-                row['Term'], row['Section'], row['Title'], row['Location'], row['Meeting Info'],
-                row['Faculty'], row['Available/Capacity'], row['Status'], row['Credits'],
-                row['Academic Level'], row['Restrictions'], row['Blocked Time Slots'],
+                term=row.get('Term', ''),
+                section=row.get('Section', ''),
+                title=row.get('Title', ''),
+                location=row.get('Location', ''),
+                meeting_info=row.get('Meeting Info', ''),
+                faculty=row.get('Faculty', ''),
+                capacity=str(row.get('Available/Capacity', '')).split('/')[0].strip(),  # Convert to string and split
+                status=row.get('Status', ''),
+                credits=row.get('Credits', ''),
+                academic_level=row.get('Academic Level', ''),
+                scheduled_day=row.get('Days', ''), 
+                scheduled_time=row.get('Time Slot', ''), 
+                restrictions=row.get('Restrictions', ''),
+                blocked_time_slots=row.get('Blocked Time Slots', '')
             )
             class_sections.append(class_section)
 
     except Exception as e:
-        # Handle any exceptions that may occur during parsing
-        print(f"Error processing CSV data: {str(e)}")
+        print(f"An error occurred while processing the uploaded data: {e}")
+        # Handle error accordingly, possibly returning an empty list or re-raising the exception.
 
     return class_sections
 
-
+@app.route('/upload', methods=['GET', 'POST'])
 def upload():
     uploaded_file_data = None
     class_sections = None
