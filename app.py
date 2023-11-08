@@ -561,14 +561,9 @@ def index():
             # Save the uploaded file data
             uploaded_file_data = file.read().decode('utf-8')
 
-
     return render_template('index.html', uploaded_file_data=uploaded_file_data)
 
 
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-

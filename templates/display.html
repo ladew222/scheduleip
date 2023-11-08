@@ -76,7 +76,7 @@
         </thead>
         <tbody id="class-table-body">
             {% for class_section in class_sections %}
-                <tr id="row-{{ loop.index }}" class="class-row drop-zone" data-tags="" data-section-title="{{ class_section.section }}">
+                <tr id="row-{{ loop.index }}" class="class-row drop-zone" data-tags="" data-section-title="{{ class_section['sec name'] }}">
                     <td>{{ class_section['sec name'] }}</td>
                     <td>{{ class_section['title'] }}</td>
                     <td>{{ class_section['min Credit'] }}</td>
@@ -103,7 +103,7 @@
                         </div>
                     </td>
                     <td>
-                        <input type="checkbox" class="link-checkbox"> <!-- Add checkbox for linking rows -->
+                        <input type="checkbox" class="restrict-checkbox"> <!-- Add checkbox for linking rows -->
                     </td>
                     <td>
                         <button class="btn btn-primary restrict-button">Restrict</button> <!-- Add a "Restrict" button -->

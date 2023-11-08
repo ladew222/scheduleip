@@ -1,16 +1,12 @@
 $(document).ready(function () {
     const tagifyInstances = {};
 
-
     $(".restrict-button").click(function () {
-        // Find the closest row to the clicked button
-        var $closestRow = $(this).closest("tr");
-    
-        // Extract the section title from the data-section-title attribute
-        var sectionTitle = $closestRow.data("section-title");
-    
         // Get all rows with checkboxes
         var $rowsWithCheckboxes = $("tr:has(.restrict-checkbox)");
+    
+        // Create an array to store the section titles of all checked rows
+        var checkedSectionTitles = [];
     
         // Iterate through each row with a checkbox
         $rowsWithCheckboxes.each(function () {
@@ -21,19 +17,32 @@ $(document).ready(function () {
     
             // Check if the checkbox is checked
             if ($checkbox.prop("checked")) {
-                // Find the input elements with the class "tagify-input" in the current row
-                var $tagifyInputs = $row.find(".tagify-input");
+                // Extract the section title from the data-section-title attribute of the current row
+                var sectionTitle = $row.data("section-title");
     
-                // Add the section title as a tag to each input element in the current row
-                $tagifyInputs.each(function () {
-                    var $input = $(this);
-    
-                    // Add the section title as a tag
-                    $input.tagify("add", sectionTitle);
-                });
+                // Push the section title to the array of checked section titles
+                checkedSectionTitles.push(sectionTitle);
             }
         });
+
+        
+    
+        // Iterate through each section title in the checkedSectionTitles array
+        checkedSectionTitles.forEach(function (sectionTitle) {
+            // Find the Tagify instance for the current section title
+            const tagifyInstance = tagifyInstances[sectionTitle];
+
+            // Iterate through all other checked section titles
+            checkedSectionTitles.forEach(function (otherSectionTitle) {
+                if (otherSectionTitle !== sectionTitle) {
+                    // Add the other section title as a tag to the Tagify instance
+                    tagifyInstance.addTags([otherSectionTitle]);
+                }
+            });
+        });
     });
+    
+    
     
 
     $('.blocked-times-select').select2({ width: '300px' });
@@ -66,7 +75,7 @@ $(document).ready(function () {
     $('.tagify-input').each(function () {
         // Get the parent <tr> element's unique identifier (data-section-title)
         const sectionTitle = $(this).closest('tr').data('section-title');
-        const sectionTR = $(this).closest('tr')
+        const sectionTR = $(this).closest('tr');
         // Initialize Tagify for this input
         const tagify = new Tagify(this, {
             // Tagify configuration options here
@@ -93,8 +102,9 @@ $(document).ready(function () {
             // Additional actions can be performed here
         });
 
+        // Store the Tagify instance in your tagifyInstances object
+        tagifyInstances[sectionTitle] = tagify;
     });
-
 
     // Optional: Save table data to CSV
     $('#save-csv').on('click', function () {
@@ -112,8 +122,3 @@ $(document).ready(function () {
         link.click();
     });
 });
-
-
-
-
- 
