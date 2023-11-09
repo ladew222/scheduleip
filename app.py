@@ -11,80 +11,81 @@ app = Flask(__name__)
 
 
 def create_meeting_times():
-    your_meeting_time_data = [
+        your_meeting_time_data = [
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '8:00AM',
             'end_time': '8:55AM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '9:05AM',
             'end_time': '10:00AM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '10:10AM',
             'end_time': '11:05AM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '11:15AM',
             'end_time': '12:10PM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '12:20PM',
             'end_time': '1:15PM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '1:25PM',
             'end_time': '2:20PM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '2:30PM',
             'end_time': '3:25PM',
         },
         {
-            'days': 'MWF',
+            'days': 'M W F',
             'start_time': '3:35PM',
             'end_time': '4:30PM',
         },
         {
-            'days': 'TTh',
+            'days': 'Tu Th',
             'start_time': '8:00AM',
             'end_time': '9:20AM',
         },
         {
-            'days': 'TTh',
+            'days': 'Tu Th',
             'start_time': '9:30AM',
             'end_time': '10:50AM',
         },
         {
-            'days': 'TTh',
+            'days': 'Tu Th',
             'start_time': '11:00AM',
             'end_time': '12:20PM',
         },
         {
-            'days': 'TTh',
+            'days': 'Tu Th',
             'start_time': '12:30PM',
             'end_time': '1:50PM',
         },
         {
-            'days': 'TTh',
+            'days': 'Tu Th',
             'start_time': '2:00PM',
             'end_time': '3:20PM',
         },
         {
-            'days': 'TTh',
+            'days': 'Tu Th',
             'start_time': '3:30PM',
             'end_time': '4:50PM',
         },
     ]
 
-    return MeetingTimes(your_meeting_time_data)
+        return your_meeting_time_data
+    
 
 def class_section_to_dict(class_section):
     return {
@@ -103,37 +104,21 @@ def class_section_to_dict(class_section):
     }
     
     
+
+
+    
 class ClassSection:
-    def __init__(self, term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level,scheduled_day,scheduled_time, restrictions, blocked_time_slots):
-        self.term = term
-        self.section = section
+    def __init__(self, sec_name, title, min_credit, sec_cap, room, bldg, week_days, csm_start, csm_end, faculty1, restrictions, blocked_time_slots, assigned_meeting_time_indices=None):
+        self.sec_name = sec_name
         self.title = title
-        self.location = location
-        self.meeting_info = meeting_info
-        self.faculty = faculty
-        # self.capacity = int(capacity)  # Extract the capacity as an integer
-        try:
-            # Split the capacity value by '/' and take the first part
-            capacity_parts = capacity.split('/')
-            self.capacity = int(capacity_parts[0].strip())  # Extract and convert to an integer
-        except (ValueError, IndexError):
-            # Handle the case where the conversion fails or the value is missing
-            self.capacity = 0  # You can set a default value or handle it as needed
-
-        self.status = status
-        # Handle credits which could be a float or a string with a range
-        try:
-            self.credits = float(credits)
-        except ValueError:
-            # If there's a ValueError, it might be a string with a range, e.g., "1.00 - 12.0"
-            if isinstance(credits, str) and '-' in credits:
-                # Here, you can decide how to handle the range, for this example, we set it to 0
-                self.credits = 0
-            else:
-                # If it's another sort of string that can't be converted to float, also set to 0 or handle as needed
-                self.credits = 0
-
-        self.academic_level = academic_level
+        self.min_credit = min_credit
+        self.sec_cap = sec_cap
+        self.room = room
+        self.bldg = bldg
+        self.week_days = week_days
+        self.csm_start = csm_start
+        self.csm_end = csm_end
+        self.faculty1 = faculty1
 
         # List of classes to avoid
         self.avoid_classes = []
@@ -141,15 +126,22 @@ class ClassSection:
         # List of unwanted timeslots
         self.unwanted_timeslots = []
 
-        # Only populate days and time_slot if they are not already set
-        if not hasattr(self, 'days'):
-            self.days = self.extract_days_from_meeting_info(meeting_info)
-        if not hasattr(self, 'time_slot'):
-            self.time_slot = self.extract_time_slot_from_meeting_info(meeting_info)
+        if assigned_meeting_time_indices is None:
+            # Initialize assigned meeting time indices as an empty list
+            self.assigned_meeting_time_indices = []
+        else:
+            # Use the provided assigned meeting time indices
+            self.assigned_meeting_time_indices = assigned_meeting_time_indices
 
         # Add restrictions and blocked_time_slots to the lists
         self.add_restrictions(restrictions)
         self.add_unwanted_timeslots(blocked_time_slots)
+
+        # If assigned meeting time indices are not vided, calculate them
+        if not assigned_meeting_time_indices:
+            meeting_times_data = create_meeting_times()
+            self.calculate_assigned_meeting_time_indices(meeting_times_data)
+
 
     def add_restrictions(self, restrictions):
         # Check if restrictions is not None, is a string, and is not empty before splitting
@@ -163,68 +155,36 @@ class ClassSection:
             # Split and add blocked_time_slots to the unwanted_timeslots list
             self.unwanted_timeslots.extend(blocked_time_slots.split(';'))
 
+    def calculate_assigned_meeting_time_indices(self, meeting_times_data):
+        # Initialize assigned meeting time indices as an empty list
+        assigned_meeting_time_indices = []
+
+        # Iterate through meeting times data
+        for index, meeting_time in enumerate(meeting_times_data):
+            if set(meeting_time['days']).issubset(set(self.week_days)):
+                # Check if class days contain all meeting days
+                start_time = meeting_time['start_time']
+                end_time = meeting_time['end_time']
+                class_start_time = self.csm_start
+
+                # Check if class start time falls within the meeting time slot
+                if start_time <= class_start_time <= end_time:
+                    assigned_meeting_time_indices.append(index)
+
+        # Update the assigned meeting time indices
+        self.assigned_meeting_time_indices = assigned_meeting_time_indices
 
 
-    def extract_days_from_meeting_info(self, meeting_info):
-        # Determine if it's MWF or TTh based on "Meeting Info" (you can modify this logic as needed)
-        if "Monday, Wednesday, Friday" in meeting_info:
-            return "MWF"
-        elif "Tuesday, Thursday" in meeting_info:
-            return "TTh"
-        else:
-            return None
-
-    def extract_time_slot_from_meeting_info(self, meeting_info):
-        # Extract the time slot from "Meeting Info" (you can modify this logic as needed)
-        # Example logic: Look for a time pattern like "9:05AM - 10:00AM"
-        time_pattern = re.search(r'\d{1,2}:\d{2}[APM]{2} - \d{1,2}:\d{2}[APM]{2}', meeting_info)
-        if time_pattern:
-            return time_pattern.group()
-        else:
-            return None
+        # Update the assigned meeting time indices
+        self.assigned_meeting_time_indices = assigned_meeting_time_indices
 
 
-class MeetingTimes:
-    def __init__(self, your_meeting_time_data):
-        # Initialize meeting times based on your_meeting_time_data
-        self.meeting_times = your_meeting_time_data
-
-    def choose_time_blocks(self, days, credits):
-        # Implement logic to choose appropriate time blocks based on days and credits
-        time_blocks = []
-
-        # Define the time slots based on the provided schedule
-        if days == "MWF" or days == "TTh":
-            time_blocks = [
-                "8:00AM - 9:20AM",
-                "9:30AM - 10:50AM",
-                "11:00AM - 12:20PM",
-                "12:30PM - 1:50PM",
-                "2:00PM - 3:20PM",
-                "3:30PM - 4:50PM",
-            ]
-
-        return time_blocks
+        # Update the assigned meeting time indices
+        self.assigned_meeting_time_indices = assigned_meeting_time_indices
 
 
 
-    def get_days(self, days):
-        # Implement logic to get individual days based on input (e.g., "MWF" -> ["M", "W", "F"])
-        individual_days = []
-        for day in days:
-            if day == "M":
-                individual_days.append("Monday")
-            elif day == "T":
-                individual_days.append("Tuesday")
-            elif day == "W":
-                individual_days.append("Wednesday")
-            elif day == "R":
-                individual_days.append("Thursday")
-            elif day == "F":
-                individual_days.append("Friday")
-            # Add additional days as needed (e.g., "S" for Saturday, "U" for Sunday)
 
-        return individual_days
 
 
 # Function to create ClassSection objects from data
@@ -232,24 +192,23 @@ def create_class_sections_from_data(class_sections_data):
     class_sections = []
     for section_data in class_sections_data:
         # Extract data from 'section_data' and create a ClassSection object
-        term = section_data.get('term', '')
-        section = section_data.get('section', '')
+        sec_name = section_data.get('section', '')  # Updated to match the new column name
         title = section_data.get('title', '')
-        location = section_data.get('location', '')
-        meeting_info = section_data.get('meetingInfo', '')
-        faculty = section_data.get('faculty', '')
-        capacity = section_data.get('capacity', '')
-        status = section_data.get('status', '')
-        credits = section_data.get('credits', '')
-        academic_level = section_data.get('academicLevel', '')
+        min_credit = section_data.get('minCredit', '')  # Updated to match the new column name
+        sec_cap = section_data.get('secCap', '')  # Updated to match the new column name
+        room = section_data.get('room', '')
+        bldg = section_data.get('bldg', '')
+        week_days = section_data.get('weekDays', '')  # Updated to match the new column name
+        csm_start = section_data.get('csmStart', '')  # Updated to match the new column name
+        csm_end = section_data.get('csmEnd', '')  # Updated to match the new column name
+        faculty1 = section_data.get('faculty1', '')  # Updated to match the new column name
         restrictions = section_data.get('restrictions', '')
-        days = section_data.get('days', '')
-        time_slot = section_data.get('timeSlot', '')
-        
-        class_section = ClassSection(term, section, title, location, meeting_info, faculty, capacity, status, credits, academic_level, restrictions)
+        blocked_time_slots = section_data.get('blockedTimeSlots', '')  # Updated to match the new column name
+        class_section = ClassSection(sec_name, title, min_credit, sec_cap, room, bldg, week_days, csm_start, csm_end, faculty1, restrictions,blocked_time_slots)
         class_sections.append(class_section)
 
     return class_sections
+
 
 
 
@@ -297,53 +256,29 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 
-# Create a list of ClassSection objects from the CSV data
-def read_csv_and_create_class_sections_old(csv_filename):
-    class_sections = []
-    with open(csv_filename, 'r', newline='') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            class_section = ClassSection(
-                term=row.get('Term', ''),
-                section=row.get('Section', ''),
-                title=row.get('Title', ''),
-                location=row.get('Location', ''),
-                meeting_info=row.get('Meeting Info', ''),
-                faculty=row.get('Faculty', ''),
-                capacity=row.get('Available/Capacity', '').split('/')[0].strip(),  # Only pass the available part
-                status=row.get('Status', ''),
-                credits=row.get('Credits', ''),
-                academic_level=row.get('Academic Level', ''),
-                scheduled_day=row.get('Days', ''),  # assuming 'Days' is the correct column name
-                scheduled_time=row.get('Time Slot', ''),  # assuming 'Time Slot' is the correct column name
-                restrictions=row.get('Restrictions', ''),
-                blocked_time_slots=row.get('Blocked Time Slots', '')
-            )
-
-            class_sections.append(class_section)
-    return class_sections
-
 
 def optimize_schedule(class_sections, meeting_times):
+    # Extract the meeting times list from the MeetingTimes object
+
     # Create a binary variable for each class and time slot
     class_timeslots = pulp.LpVariable.dicts(
         "ClassTimeslot",
-        ((class_section.section, day, start_time)
+        ((class_section.sec_name, meeting_time['days'], meeting_time['start_time'])
          for class_section in class_sections
-         for day in ["MWF", "TTh"]
-         for start_time in meeting_times.choose_time_blocks(day, class_section.credits)),
+         for meeting_time in meeting_times
+         if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices),
         cat=pulp.LpBinary
     )
-    
-    # Additional variables for 4-credit classes if they exist
+
+    # Additional variables for 1-credit classes if they exist
     extra_timeslots = {}
-    if any(cs.credits == 4 for cs in class_sections):
+    if any(cs.min_credit == '1' for cs in class_sections):
         extra_timeslots = pulp.LpVariable.dicts(
             "ExtraTimeslot",
-            ((class_section.section, day, start_time)
-             for class_section in class_sections if class_section.credits == 4
-             for day in ["MWF", "TTh"]
-             for start_time in meeting_times.choose_extra_time_blocks(day)),
+            ((class_section.sec_name, meeting_time['days'], meeting_time['start_time'])
+             for class_section in class_sections if class_section.min_credit == '1'
+             for meeting_time in meeting_times
+             if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices),
             cat=pulp.LpBinary
         )
 
@@ -351,90 +286,82 @@ def optimize_schedule(class_sections, meeting_times):
     model = pulp.LpProblem("ClassScheduling", pulp.LpMinimize)
 
     # Objective function
-    model += pulp.lpSum([class_timeslots[class_section.section, day, start_time]
+    model += pulp.lpSum([class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
                          for class_section in class_sections
-                         for day in ["MWF", "TTh"]
-                         for start_time in meeting_times.choose_time_blocks(day, class_section.credits)])
-    
-    
+                         for meeting_time in meeting_times
+                         if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices])
+
     # Penalize overlapping classes that should avoid each other
     for class_section in class_sections:
         for other_section in class_sections:
-            if other_section.section in class_section.avoid_classes:
-                for day in ["MWF", "TTh"]:
-                    for start_time in meeting_times.choose_time_blocks(day, class_section.credits):
-                        model += 50 * (class_timeslots[class_section.section, day, start_time] * 
-                                        class_timeslots[other_section.section, day, start_time])
+            if other_section.sec_name in class_section.avoid_classes:
+                for meeting_time in meeting_times:
+                    if (meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices and
+                            meeting_times.index(meeting_time) in class_sections.assigned_meeting_time_indices):
+                        model += 50 * (class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']] *
+                                        class_timeslots[other_section.sec_name, meeting_time['days'], meeting_time['start_time']])
 
-    # Constraint 1: Each class is scheduled once and only once, twice if it's a 4-credit class
+    # Modify constraints to work with the updated variable structure
+
+    # Constraint 1: Each class is scheduled once and only once
     for class_section in class_sections:
-        timeslots_required = 2 if class_section.credits == 4 else 1
-        model += pulp.lpSum(class_timeslots[class_section.section, day, start_time]
-                            for day in ["MWF", "TTh"]
-                            for start_time in meeting_times.choose_time_blocks(day, class_section.credits)) == timeslots_required
+        timeslots_required = 2 if class_section.min_credit == '4' else 1
+        model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
+                            for meeting_time in meeting_times
+                            if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices) == timeslots_required
 
     # Constraint 2: Instructor constraints (each instructor can teach one class at a time)
-    instructors = set(cs.faculty for cs in class_sections)
+    instructors = set(cs.faculty1 for cs in class_sections)
     for instructor in instructors:
-        for day in ["MWF", "TTh"]:
-            for time in meeting_times.all_time_blocks:
-                model += pulp.lpSum(class_timeslots[class_section.section, day, time]
+        for meeting_time in meeting_times:
+            if any(cs.faculty1 == instructor for cs in class_sections if
+                   meeting_times.index(meeting_time) in cs.assigned_meeting_time_indices):
+                model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
                                     for class_section in class_sections
-                                    if class_section.faculty == instructor) <= 1
+                                    if class_section.faculty1 == instructor) <= 1
 
     # Constraint 3: No class overlap
-    for day in ["MWF", "TTh"]:
-        for time in meeting_times.all_time_blocks:
-            model += pulp.lpSum(class_timeslots[class_section.section, day, time]
-                                for class_section in class_sections) <= 1
+    for meeting_time in meeting_times:
+        model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
+                            for class_section in class_sections
+                            if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices) <= 1
 
     # Constraint 4: Room constraints (no two classes can be in the same room at the same time)
     rooms = set(cs.room for cs in class_sections)
     for room in rooms:
-        for day in ["MWF", "TTh"]:
-            for time in meeting_times.all_time_blocks:
-                model += pulp.lpSum(class_timeslots[class_section.section, day, time]
+        for meeting_time in meeting_times:
+            if any(cs.room == room for cs in class_sections if
+                   meeting_times.index(meeting_time) in cs.assigned_meeting_time_indices):
+                model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
                                     for class_section in class_sections
                                     if class_section.room == room) <= 1
 
-    # ... [Other existing constraints]
     # Constraint for avoiding unwanted timeslots for certain classes
     for class_section in class_sections:
-        for day, start_time in class_section.unwanted_timeslots:
-            # Ensuring that the class is not scheduled in the unwanted timeslot
-            model += class_timeslots[class_section.section, day, start_time] == 0
-    
+        for meeting_time_index in class_section.unwanted_timeslots:
+            if meeting_time_index < len(meeting_times):
+                model += class_timeslots[class_section.sec_name, meeting_times[meeting_time_index]['days'], meeting_times[meeting_time_index]['start_time']] == 0
 
-    # Additional constraints for 4-credit classes
-    if any(cs.credits == 4 for cs in class_sections):
-        for class_section in [cs for cs in class_sections if cs.credits == 4]:
-            # Constraint: A 4-credit class must be scheduled an additional time slot
-            model += pulp.lpSum(extra_timeslots[class_section.section, day, start_time]
-                                for day in ["MWF", "TTh"]
-                                for start_time in meeting_times.choose_extra_time_blocks(day)) == 1
+    # Additional constraints for 1-credit classes
+    for class_section in [cs for cs in class_sections if cs.min_credit == '1']:
+        # Constraint: A 1-credit class must be scheduled an extra time slot
+        model += pulp.lpSum(extra_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
+                            for meeting_time in meeting_times
+                            if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices) == 1
 
-            # Constraint: This additional time slot must not conflict with other classes
-            for day in ["MWF", "TTh"]:
-                for start_time in meeting_times.choose_extra_time_blocks(day):
-                    model += pulp.lpSum(extra_timeslots[class_section.section, day, start_time] +
-                                        class_timeslots.get((class_section.section, day, start_time), 0)
-                                        for cs in class_sections if cs.credits == 3) <= 1
+        # Constraint: This extra time slot must not conflict with other classes
+        for meeting_time in meeting_times:
+            if (meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices and
+                    meeting_times.index(meeting_time) < len(meeting_times)):
+                model += pulp.lpSum(extra_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']] +
+                                    class_timeslots.get((class_section.sec_name, meeting_time['days'], meeting_time['start_time']), 0)
+                                    for cs in class_sections if cs.min_credit == '3') <= 1
 
     # Solve the optimization problem
     model.solve()
 
-    # Interpret
-
-    
-    
-    
-    
-     # Constraint 1: Each class is scheduled once and only once, twice if it's a 4-credit class
-    for class_section in class_sections:
-        timeslots_required = 2 if class_section.credits == 4 else 1
-        model += pulp.lpSum(class_timeslots[class_section.section, day, start_time]
-                            for day in ["MWF", "TTh"]
-                            for start_time in meeting_times.choose_time_blocks(day, class_section.credits)) == timeslots_required
+    # Interpret the solution
+    # (You can add code here to extract and print the schedule)
 
 
 
@@ -524,7 +451,7 @@ def upload():
             # Process the uploaded file data to create class_sections
             class_sections = process_uploaded_data(uploaded_file_data)
 
-    return render_template('display.html', class_sections = class_sections, your_meeting_time_data=create_meeting_times().meeting_times)
+    return render_template('display.html', class_sections = class_sections, your_meeting_time_data=create_meeting_times())
 
 
 @app.route('/load-schedule', methods=['GET'])
@@ -560,6 +487,7 @@ def index():
         if file:
             # Save the uploaded file data
             uploaded_file_data = file.read().decode('utf-8')
+
 
     return render_template('index.html', uploaded_file_data=uploaded_file_data)
 

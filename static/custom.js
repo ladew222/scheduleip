@@ -1,3 +1,10 @@
+ // Function to convert an array to a string with a specified delimiter
+ function arrayToString(arr, delimiter) {
+    return arr.join(delimiter);
+}
+
+
+
 $(document).ready(function () {
     const tagifyInstances = {};
 
@@ -121,4 +128,52 @@ $(document).ready(function () {
         link.download = 'schedule.csv';
         link.click();
     });
+
+
+    $('#apply-constraints').on('click', function () {
+        const classData = [];
+        $('#class-table-body tr').each(function () {
+            const rowDataTags = $(this).data('tags') || [];
+    
+            const rowData = {
+                section: $(this).find('td:eq(0)').text(),
+                title: $(this).find('td:eq(1)').text(),
+                minCredit: $(this).find('td:eq(2)').text(),
+                secCap: $(this).find('td:eq(3)').text(),
+                room: $(this).find('td:eq(4)').text(),
+                bldg: $(this).find('td:eq(5)').text(),
+                weekDays: $(this).find('td:eq(6)').text(),
+                csmStart: $(this).find('td:eq(7)').text(),
+                csmEnd: $(this).find('td:eq(8)').text(),
+                faculty1: $(this).find('td:eq(9)').text(),
+                restrictions: arrayToString(rowDataTags, ';'),
+                blockedTimeSlots: arrayToString($(this).find('td:eq(11) select').val() || [], ';'),
+            };
+    
+            classData.push(rowData);
+        });
+    
+        // Send the data to the server for optimization
+        const requestData = {
+            classData: classData,
+            userBlockedTimes: '',
+        };
+    
+        $.ajax({
+            type: 'POST',
+            url: '/optimize', // Replace with your endpoint for optimization
+            data: JSON.stringify(requestData),
+            contentType: 'application/json',
+            success: function (response) {
+                // Handle the optimization results
+                // You can display the results on the page or perform any other actions
+                console.log('Optimization successful:', response);
+            },
+            error: function (error) {
+                console.error('Error:', error);
+            },
+        });
+    });
+    
+    
 });
