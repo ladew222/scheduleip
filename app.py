@@ -258,38 +258,32 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 def optimize_schedule(class_sections, meeting_times):
-    # Extract the meeting times list from the MeetingTimes object
 
-    # Create a binary variable for each class and time slot
+    # Create binary variables for all possible combinations of class sections and meeting times
     class_timeslots = pulp.LpVariable.dicts(
         "ClassTimeslot",
         ((class_section.sec_name, meeting_time['days'], meeting_time['start_time'])
-         for class_section in class_sections
-         for meeting_time in meeting_times
-         if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices),
+        for class_section in class_sections
+        for meeting_time in meeting_times),
         cat=pulp.LpBinary
     )
 
-    # Additional variables for 1-credit classes if they exist
-    extra_timeslots = {}
-    if any(cs.min_credit == '1' for cs in class_sections):
-        extra_timeslots = pulp.LpVariable.dicts(
-            "ExtraTimeslot",
-            ((class_section.sec_name, meeting_time['days'], meeting_time['start_time'])
-             for class_section in class_sections if class_section.min_credit == '1'
-             for meeting_time in meeting_times
-             if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices),
-            cat=pulp.LpBinary
-        )
+    # Objective function and other parts of your code (penalties, optimization, etc.) remain unchanged
+
 
     # Create an optimization problem
     model = pulp.LpProblem("ClassScheduling", pulp.LpMinimize)
-
+    
+    
+    
+  
     # Objective function
     model += pulp.lpSum([class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
                          for class_section in class_sections
                          for meeting_time in meeting_times
                          if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices])
+
+
 
     # Penalize overlapping classes that should avoid each other
     for class_section in class_sections:
@@ -301,7 +295,6 @@ def optimize_schedule(class_sections, meeting_times):
                         model += 50 * (class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']] *
                                         class_timeslots[other_section.sec_name, meeting_time['days'], meeting_time['start_time']])
 
-    # Modify constraints to work with the updated variable structure
 
     # Constraint 1: Each class is scheduled once and only once
     for class_section in class_sections:
@@ -336,32 +329,30 @@ def optimize_schedule(class_sections, meeting_times):
                                     for class_section in class_sections
                                     if class_section.room == room) <= 1
 
-    # Constraint for avoiding unwanted timeslots for certain classes
-    for class_section in class_sections:
-        for meeting_time_index in class_section.unwanted_timeslots:
-            if meeting_time_index < len(meeting_times):
-                model += class_timeslots[class_section.sec_name, meeting_times[meeting_time_index]['days'], meeting_times[meeting_time_index]['start_time']] == 0
-
-    # Additional constraints for 1-credit classes
-    for class_section in [cs for cs in class_sections if cs.min_credit == '1']:
-        # Constraint: A 1-credit class must be scheduled an extra time slot
-        model += pulp.lpSum(extra_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
-                            for meeting_time in meeting_times
-                            if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices) == 1
-
-        # Constraint: This extra time slot must not conflict with other classes
-        for meeting_time in meeting_times:
-            if (meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices and
-                    meeting_times.index(meeting_time) < len(meeting_times)):
-                model += pulp.lpSum(extra_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']] +
-                                    class_timeslots.get((class_section.sec_name, meeting_time['days'], meeting_time['start_time']), 0)
-                                    for cs in class_sections if cs.min_credit == '3') <= 1
-
     # Solve the optimization problem
     model.solve()
+    
+    # Check the status of the optimization
+    if pulp.LpStatus[model.status] == "Optimal":
+        print("Optimal solution found!")
+        
+        # Extract and print the schedule results
+        schedule = {}
+        for class_section in class_sections:
+            for meeting_time in meeting_times:
+                if class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']].value() == 1:
+                    schedule[class_section.sec_name] = meeting_time
+                    print(f"{class_section.sec_name} scheduled on {meeting_time['days']} at {meeting_time['start_time']}")
 
-    # Interpret the solution
-    # (You can add code here to extract and print the schedule)
+        return schedule
+    else:
+        print("No optimal solution found.")
+        return None
+    
+    
+
+# Call the function with your class_sections and meeting_times
+
 
 
 
