@@ -234,7 +234,7 @@ def create_class_sections_from_data(class_sections_data):
         csm_start = section_data.get('csmStart', '')  # Updated to match the new column name
         csm_end = section_data.get('csmEnd', '')  # Updated to match the new column name
         faculty1 = section_data.get('faculty1', '')  # Updated to match the new column name
-        holdValue = section_data.get('holdValue', '')  # Updated to match the new column name
+        holdValue = section_data.get('hold', '')  # Updated to match the new column name
         restrictions = section_data.get('restrictions', '')
         blocked_time_slots = section_data.get('blockedTimeSlots', '')  # Updated to match the new column name
         class_section = ClassSection(sec_name, title, min_credit, sec_cap, room, bldg, week_days, csm_start, csm_end, faculty1, holdValue ,restrictions,blocked_time_slots)
@@ -325,11 +325,15 @@ def optimize_schedule(class_sections, meeting_times):
             
    # Penalty for avoiding classes in the same timeslot
     penalty = 100  # Adjust the penalty weight as needed
+    constraint_counter = 0  # Initialize a counter for constraint names
     for cls in class_sections:
         for tsl in timeslots:
             for other_cls_name in cls.avoid_classes:
                 if (other_cls_name, tsl) in x:
-                    prob += x[cls.sec_name, tsl] + x[other_cls_name, tsl] <= 1, f"AvoidClassesPenalty_{cls.sec_name}_{tsl}"
+                    constraint_counter += 1
+                    constraint_name = f"AvoidClassesPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
+                    prob += x[cls.sec_name, tsl] + x[other_cls_name, tsl] <= 1, constraint_name
+
 
 
     # Solve the problem
