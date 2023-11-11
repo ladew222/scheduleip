@@ -2,6 +2,17 @@
  function arrayToString(arr, delimiter) {
     return arr.join(delimiter);
 }
+// Function to convert the array of objects into a semicolon-separated string
+function valuesToString(arr) {
+    return arr.map(obj => obj.value).join('; ');
+}
+
+
+// Function to get the checkbox value (1 or 0)
+function getCheckboxValue($row) {
+    const $checkbox = $row.find(".hold-checkbox");
+    return $checkbox.prop("checked") ? 1 : 0;
+}
 
 
 
@@ -29,6 +40,8 @@ $(document).ready(function () {
     
                 // Push the section title to the array of checked section titles
                 checkedSectionTitles.push(sectionTitle);
+                
+
             }
         });
 
@@ -71,6 +84,7 @@ $(document).ready(function () {
             { title: 'CSM start' },
             { title: 'CSM end' },
             { title: 'Faculty1' },
+            { title: 'holdValue' },
             { title: 'Restrictions' },
             { title: 'Blocked Time Slots' },
             { title: 'Select' },
@@ -102,7 +116,7 @@ $(document).ready(function () {
         tagify.on('remove', function (e) {
             const cleanValue = e.detail.tagify.getCleanValue();
             // Create a comma-separated string from the array values
-            const tagsString = cleanValue.map(tag => tag.value).join(', ');
+            const tagsString = cleanValue.map(tag => tag.value).join('; ');
             // Access the parent <tr> element using sectionTR
             sectionTR.data('tags', tagsString);
             console.log('Removed tag in parent <tr>:', sectionTR);
@@ -133,7 +147,10 @@ $(document).ready(function () {
     $('#apply-constraints').on('click', function () {
         const classData = [];
         $('#class-table-body tr').each(function () {
-            const rowDataTags = $(this).data('tags') || [];
+
+            const rowDataTags = tagifyInstances[$(this).data('section-title')].value
+            let resultString = valuesToString(rowDataTags);
+            const holdValue = getCheckboxValue($(this));
     
             const rowData = {
                 section: $(this).find('td:eq(0)').text(),
@@ -146,8 +163,9 @@ $(document).ready(function () {
                 csmStart: $(this).find('td:eq(7)').text(),
                 csmEnd: $(this).find('td:eq(8)').text(),
                 faculty1: $(this).find('td:eq(9)').text(),
-                restrictions: arrayToString(rowDataTags, ';'),
-                blockedTimeSlots: arrayToString($(this).find('td:eq(11) select').val() || [], ';'),
+                hold: holdValue,
+                restrictions: resultString,
+                blockedTimeSlots: arrayToString($(this).find('td:eq(12) select').val() || [], ';'),
             };
     
             classData.push(rowData);

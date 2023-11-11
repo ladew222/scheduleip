@@ -68,6 +68,7 @@
                 <th>CSM start</th>
                 <th>CSM end</th>
                 <th>Faculty1</th>
+                <th>Hold</th>
                 <th>Restrictions</th>
                 <th>Blocked Time Slots</th>
                 <th>Select</th> <!-- Add a new column for checkboxes -->
@@ -87,6 +88,10 @@
                     <td>{{ class_section['CSM start'] }}</td>
                     <td>{{ class_section['CSM end'] }}</td>
                     <td>{{ class_section['faculty1'] }}</td>
+                    <td>
+                        <!-- Add a checkbox for the "Hold" column -->
+                        <input type="checkbox" class="hold-checkbox" {% if class_section['hold'] == '1' %}checked{% endif %}>
+                    </td>
                     <td>
                         <!-- Add tags for Restrictions here -->
                         <!-- Example using Tagify (you can customize this): -->
