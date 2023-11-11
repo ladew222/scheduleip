@@ -258,31 +258,38 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 def optimize_schedule(class_sections, meeting_times):
-
     # Create binary variables for all possible combinations of class sections and meeting times
     class_timeslots = pulp.LpVariable.dicts(
         "ClassTimeslot",
         ((class_section.sec_name, meeting_time['days'], meeting_time['start_time'])
-        for class_section in class_sections
-        for meeting_time in meeting_times),
+         for class_section in class_sections
+         for meeting_time in meeting_times),
         cat=pulp.LpBinary
     )
 
-    # Objective function and other parts of your code (penalties, optimization, etc.) remain unchanged
-
+    # Create a binary variable for each class section to indicate the credit requirement
+    class_credits = pulp.LpVariable.dicts(
+        "ClassCredits",
+        (class_section.sec_name for class_section in class_sections),
+        cat=pulp.LpBinary
+    )
 
     # Create an optimization problem
     model = pulp.LpProblem("ClassScheduling", pulp.LpMinimize)
-    
-    
-    
-  
-    # Objective function
-    model += pulp.lpSum([class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
-                         for class_section in class_sections
-                         for meeting_time in meeting_times
-                         if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices])
 
+    # Add constraints for classes with 3 or fewer credits to ensure they take one slot
+    for class_section in class_sections:
+        if int(class_section.min_credit) <= 3:
+            model += class_credits[class_section.sec_name] == 0
+            for meeting_time in meeting_times:
+                model += class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']] <= 1
+
+    # Add constraints for classes with more than 3 credits to ensure they take two slots
+    for class_section in class_sections:
+        if int(class_section.min_credit) > 3:
+            model += class_credits[class_section.sec_name] == 1
+            for meeting_time in meeting_times:
+                model += class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']] <= 2
 
 
     # Penalize overlapping classes that should avoid each other
@@ -296,42 +303,23 @@ def optimize_schedule(class_sections, meeting_times):
                                         class_timeslots[other_section.sec_name, meeting_time['days'], meeting_time['start_time']])
 
 
-    # Constraint 1: Each class is scheduled once and only once
-    for class_section in class_sections:
-        timeslots_required = 2 if class_section.min_credit == '4' else 1
-        model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
-                            for meeting_time in meeting_times
-                            if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices) == timeslots_required
 
-    # Constraint 2: Instructor constraints (each instructor can teach one class at a time)
-    instructors = set(cs.faculty1 for cs in class_sections)
-    for instructor in instructors:
-        for meeting_time in meeting_times:
-            if any(cs.faculty1 == instructor for cs in class_sections if
-                   meeting_times.index(meeting_time) in cs.assigned_meeting_time_indices):
-                model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
-                                    for class_section in class_sections
-                                    if class_section.faculty1 == instructor) <= 1
-
-    # Constraint 3: No class overlap
-    for meeting_time in meeting_times:
-        model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
-                            for class_section in class_sections
-                            if meeting_times.index(meeting_time) in class_section.assigned_meeting_time_indices) <= 1
-
-    # Constraint 4: Room constraints (no two classes can be in the same room at the same time)
-    rooms = set(cs.room for cs in class_sections)
-    for room in rooms:
-        for meeting_time in meeting_times:
-            if any(cs.room == room for cs in class_sections if
-                   meeting_times.index(meeting_time) in cs.assigned_meeting_time_indices):
-                model += pulp.lpSum(class_timeslots[class_section.sec_name, meeting_time['days'], meeting_time['start_time']]
-                                    for class_section in class_sections
-                                    if class_section.room == room) <= 1
 
     # Solve the optimization problem
     model.solve()
+    print(class_timeslots)
+    for var in class_timeslots:
+        print(f"{var}: {class_timeslots[var].value()}")
+        
     
+    # Iterate over the class_timeslots dictionary
+    for (class_section, day, start_time), variable in class_timeslots.items():
+        # Check the value of the variable
+        if variable.value() == 1:
+            # The class is scheduled at this time
+            print(f"{class_section} is scheduled on {day} at {start_time}")
+        
+        
     # Check the status of the optimization
     if pulp.LpStatus[model.status] == "Optimal":
         print("Optimal solution found!")
@@ -350,6 +338,7 @@ def optimize_schedule(class_sections, meeting_times):
         return None
     
     
+
 
 # Call the function with your class_sections and meeting_times
 
@@ -375,13 +364,21 @@ def optimize():
     # Optimize the schedule based on the received data
     optimized_class_sections = optimize_schedule(class_sections, meeting_times)
 
-    # Prepare the optimization results
-    optimization_results = {
-        'message': 'Optimization complete',
-        'results': [class_section_to_dict(cs) for cs in optimized_class_sections],
-    }
+    if optimized_class_sections is not None:
+        # Prepare the optimization results
+        optimization_results = {
+            'message': 'Optimization complete',
+            'results': [class_section_to_dict(cs) for cs in optimized_class_sections],
+        }
 
-    return jsonify(optimization_results)
+        return jsonify(optimization_results)
+    else:
+        # If no optimal solution is found, return an error response
+        error_response = {
+            'error': 'No optimal solution found'
+        }
+        return jsonify(error_response), 400
+
 
 
 
