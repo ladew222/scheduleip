@@ -2,6 +2,20 @@
  function arrayToString(arr, delimiter) {
     return arr.join(delimiter);
 }
+
+// Function to create an HTML table from the result array
+function createResultsTable(data) {
+    let table = '<table style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">';
+    table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Timeslot</th></tr>';
+
+    data.scheduled_sections.forEach(item => {
+        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td></tr>`;
+    });
+
+    table += '</table>';
+    return table;
+}
+
 // Function to convert the array of objects into a semicolon-separated string
 function valuesToString(arr) {
     return arr.map(obj => obj.value).join('; ');
@@ -194,12 +208,13 @@ $(document).ready(function () {
             success: function (response) {
                 // Handle the optimization results
                 console.log('Optimization successful:', response);
+                $("#optimization-results").show();
                 // Display the results in the 'results-list' div
                 $('#results-list').empty(); // Clear any previous results
                 if (response.message === 'Optimization complete') {
                     $.each(response.results, function (index, result) {
                         // Append each result to the 'results-list' div
-                        $('#results-list').append('<p>' + result + '</p>');
+                        $('#results-list').append('<p>' + createResultsTable(result) + '</p>');
                     });
                 } else {
                     $('#results-list').html('<p>Error: ' + response.error + '</p>');

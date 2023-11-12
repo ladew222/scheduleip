@@ -87,23 +87,7 @@ def create_meeting_times():
         return your_meeting_time_data
     
 
-def class_section_to_dict(class_section):
-    return {
-        'term': class_section.term,
-        'section': class_section.section,
-        'title': class_section.title,
-        'location': class_section.location,
-        'meeting_info': class_section.meeting_info,
-        'faculty': class_section.faculty,
-        'capacity': class_section.capacity,
-        'status': class_section.status,
-        'credits': class_section.credits,
-        'academic_level': class_section.academic_level,
-        'scheduled_day': getattr(class_section, 'scheduled_day', None),
-        'scheduled_time': getattr(class_section, 'scheduled_time', None),
-    }
-    
-    
+
 
 
     
@@ -392,10 +376,10 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
         for tsl in timeslots:
             # Calculate the absolute difference in indexes of cls_A and cls_B
             index_diff = abs(class_sections.index(cls_A) - class_sections.index(cls_B)) * move_penalty
-            
+            index_diff = int(index_diff)
             # Add the penalty to the objective function
-            prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] - (1 + index_diff) <= 1, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
-            
+            prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] <= 1 + index_diff, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
+
             # Update the linked_sections_penalty based on the index_diff
             linked_sections_penalty += index_diff * x[cls_A.sec_name, tsl] + index_diff * x[cls_B.sec_name, tsl]
 
@@ -403,39 +387,33 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     # Solve the problem
     prob.solve()
 
-    # Output the results
+
+    # Create a list to store the scheduled class sections
+    scheduled_sections = []
+
+    # Output the results and store scheduled sections
     for cls in class_sections:
         for tsl in timeslots:
-            if pulp.value(x[cls.sec_name,tsl]) == 1:
-                print(f"{cls.sec_name} is scheduled in {tsl}")
+            if pulp.value(x[cls.sec_name, tsl]) == 1:
+                scheduled_sections.append({
+                    'section_name': cls.sec_name,
+                    'timeslot': tsl,
+                })
 
+    # Create a dictionary to store optimization results
+    optimization_results = {
+        'message': 'Optimization complete',
+        'scheduled_sections': scheduled_sections,
+    }
 
-        # Create a list to store the scheduled class sections
-        scheduled_sections = []
+    # Check if optimization was successful
+    if prob.status == pulp.LpStatusOptimal:
+        optimization_results['status'] = 'Success'
+    else:
+        optimization_results['status'] = 'Optimization failed'
 
-        # Output the results and store scheduled sections
-        for cls in class_sections:
-            for tsl in timeslots:
-                if pulp.value(x[cls.sec_name, tsl]) == 1:
-                    scheduled_sections.append({
-                        'section_name': cls.sec_name,
-                        'timeslot': tsl,
-                    })
-
-        # Create a dictionary to store optimization results
-        optimization_results = {
-            'message': 'Optimization complete',
-            'scheduled_sections': scheduled_sections,
-        }
-
-        # Check if optimization was successful
-        if prob.status == pulp.LpStatusOptimal:
-            optimization_results['status'] = 'Success'
-        else:
-            optimization_results['status'] = 'Optimization failed'
-
-        # Render an HTML template with the optimization results
-        return render_template('optimization_results.html', results=optimization_results)
+    # Return the optimization results
+    return optimization_results
 
 
 
@@ -477,14 +455,14 @@ def optimize():
     meeting_times = create_meeting_times()
 
     # Optimize the schedule based on the received data
-    optimized_class_sections = optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    optimized_class_sections = optimize_schedule(adjusted_class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
 
     if optimized_class_sections is not None:
         # Prepare the optimization results as a dictionary
         optimization_results = {
             'message': 'Optimization complete',
-            'results': [class_section_to_dict(cs) for cs in optimized_class_sections],
+            'results': [optimized_class_sections],
         }
 
         # Return the results as JSON
