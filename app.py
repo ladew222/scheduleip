@@ -296,7 +296,28 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 
-def optimize_schedule(class_sections, meeting_times):
+def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
+    
+    
+    
+    
+    
+    linked_sections = []
+
+    for class_section in class_sections:
+        sec_name = class_section.sec_name
+
+        # Check if the section name ends with "_ex"
+        if sec_name.endswith("_ex"):
+            # Extract the base section name (without "_ex")
+            base_sec_name = sec_name[:-3]
+
+            # Find the corresponding "_ex" section, if it exists
+            corresponding_ex_section = next((cls for cls in class_sections if cls.sec_name == base_sec_name), None)
+
+            if corresponding_ex_section:
+                linked_sections.append((corresponding_ex_section, class_section))
+        
     
     
     instructors = set(cls.faculty1 for cls in class_sections)
@@ -332,7 +353,7 @@ def optimize_schedule(class_sections, meeting_times):
             prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.faculty1 == instructor and (cls.sec_name, tsl) in x) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{tsl}"
             
    # Penalty for avoiding classes in the same timeslot
-    penalty = 100  # Adjust the penalty weight as needed
+    penalty = class_penalty  # Adjust the penalty weight as needed
     constraint_counter = 0  # Initialize a counter for constraint names
     for cls in class_sections:
         for tsl in timeslots:
@@ -345,7 +366,7 @@ def optimize_schedule(class_sections, meeting_times):
 
     # Penalty for avoiding timeslots
     constraint_counter = 0  # Initialize a counter for constraint names
-    hold_penalty = 1 # Adjust the penalty weight as needed
+    #hold_penalty = hold_penalty # Adjust the penalty weight as needed
     
     # Penalty for moving a class outside its known timeslot when holdValue is 1
     for cls in class_sections:
@@ -357,7 +378,28 @@ def optimize_schedule(class_sections, meeting_times):
                     prob += x[cls.sec_name, tsl] == 0, constraint_name
 
 
+     # Additional penalty for blocked_time_slots
+    blocked_slot_penalty = blocked_slot_penalty  # Adjust the penalty weight as needed
+    for cls in class_sections:
+        for tsl in timeslots:
+            if tsl in cls.unwanted_timeslots:
+                prob += x[cls.sec_name, tsl] == 0, f"BlockedTimeSlotPenalty_{cls.sec_name}_{tsl}"
 
+    
+    # Calculate the penalty for keeping linked sections together
+    linked_sections_penalty = 0  # Initialize the penalty
+    for cls_A, cls_B in linked_sections:
+        for tsl in timeslots:
+            # Calculate the absolute difference in indexes of cls_A and cls_B
+            index_diff = abs(class_sections.index(cls_A) - class_sections.index(cls_B)) * move_penalty
+            
+            # Add the penalty to the objective function
+            prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] - (1 + index_diff) <= 1, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
+            
+            # Update the linked_sections_penalty based on the index_diff
+            linked_sections_penalty += index_diff * x[cls_A.sec_name, tsl] + index_diff * x[cls_B.sec_name, tsl]
+
+        
     # Solve the problem
     prob.solve()
 
@@ -368,7 +410,32 @@ def optimize_schedule(class_sections, meeting_times):
                 print(f"{cls.sec_name} is scheduled in {tsl}")
 
 
-    # Call the function with your class_sections and meeting_times
+        # Create a list to store the scheduled class sections
+        scheduled_sections = []
+
+        # Output the results and store scheduled sections
+        for cls in class_sections:
+            for tsl in timeslots:
+                if pulp.value(x[cls.sec_name, tsl]) == 1:
+                    scheduled_sections.append({
+                        'section_name': cls.sec_name,
+                        'timeslot': tsl,
+                    })
+
+        # Create a dictionary to store optimization results
+        optimization_results = {
+            'message': 'Optimization complete',
+            'scheduled_sections': scheduled_sections,
+        }
+
+        # Check if optimization was successful
+        if prob.status == pulp.LpStatusOptimal:
+            optimization_results['status'] = 'Success'
+        else:
+            optimization_results['status'] = 'Optimization failed'
+
+        # Render an HTML template with the optimization results
+        return render_template('optimization_results.html', results=optimization_results)
 
 
 
@@ -382,6 +449,14 @@ def optimize():
 
     # Extract class section data from the 'data' variable
     class_sections_data = data.get('classData', [])
+    
+    
+    # Extract additional parameters
+    class_penalty = data.get('classPenalty', 0)
+    move_penalty = data.get('movePenalty', 0)
+    blocked_slot_penalty = data.get('blockedSlotPenalty', 0)
+    hold_penalty = data.get('holdPenalty', 0)
+
     
     # Convert the class section data to ClassSection objects
     class_sections = create_class_sections_from_data(class_sections_data)
@@ -402,15 +477,17 @@ def optimize():
     meeting_times = create_meeting_times()
 
     # Optimize the schedule based on the received data
-    optimized_class_sections = optimize_schedule(adjusted_class_sections, meeting_times)
+    optimized_class_sections = optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+
 
     if optimized_class_sections is not None:
-        # Prepare the optimization results
+        # Prepare the optimization results as a dictionary
         optimization_results = {
             'message': 'Optimization complete',
             'results': [class_section_to_dict(cs) for cs in optimized_class_sections],
         }
 
+        # Return the results as JSON
         return jsonify(optimization_results)
     else:
         # If no optimal solution is found, return an error response

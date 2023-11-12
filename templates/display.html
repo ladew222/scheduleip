@@ -6,8 +6,11 @@
     <title>Class Scheduler</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
-    <!-- Include Bootstrap CSS -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <!-- Include Bootstrap -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-Fy6S3B9q64WdZWQUiU+q4/2Lc9npb8tCaSX9FK7E8HnRr0Jz8D6OP9dO5Vg3Q9ct" crossorigin="anonymous"></script>
+    
     
     <!-- Include jQuery and jQuery UI -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -50,8 +53,74 @@
 <div class="container mt-5">
     <h2>Class Scheduler</h2>
     
-    <!-- Apply Constraints and Optimize Button -->
-    <button id="apply-constraints" class="btn btn-primary">Apply Constraints & Optimize</button>
+    <div class="container mt-5">
+        <div class="row">
+            <!-- Create a 3-column layout for the button -->
+            <div class="col-md-3">
+                <button id="apply-constraints" class="btn btn-primary">Apply Constraints & Optimize</button>
+            </div>
+            <!-- Create a 9-column layout for the Bootstrap Collapse component -->
+            <a class="btn btn-primary" data-toggle="collapse" href="#collapseExample" role="button" aria-expanded="false" aria-controls="collapseExample">
+                Help Information
+              </a>
+            </p>
+            <div class="collapse" id="collapseExample">
+              <div class="card card-body">
+                <h4>Table Columns and Options</h4>
+                    <p>The table below provides an overview of class sections and their scheduling details to help you optimize your class schedule effectively:</p>
+
+                    <ul>
+                        <li><strong>Sections:</strong> This column displays the unique section names for each class, allowing you to identify and manage different class sections easily.</li>
+                        <li><strong>Title:</strong> The "Title" column shows the title or name of each class section, helping you distinguish between different courses.</li>
+                        <li><strong>Min Credit:</strong> This column specifies the minimum credit hours required for each class section, aiding in credit-hour allocation.</li>
+                        <li><strong>Sec Cap:</strong> "Sec Cap" stands for Section Capacity, indicating the maximum number of students that can enroll in each class section.</li>
+                        <li><strong>Room:</strong> The "Room" column displays the room or location where the class section is scheduled to take place.</li>
+                        <li><strong>Bldg:</strong> "Bldg" represents the building in which the class section's room is located, helping you locate classes within the campus.</li>
+                        <li><strong>Week Days:</strong> This column lists the days of the week when each class section meets, facilitating schedule planning.</li>
+                        <li><strong>CSM start:</strong> "CSM start" indicates the start time of the class section based on the CSM (Course Scheduling Manager) system.</li>
+                        <li><strong>CSM end:</strong> The "CSM end" column displays the end time of the class section according to the CSM system.</li>
+                        <li><strong>Faculty1:</strong> This column shows the name of the faculty member assigned to teach the class section, helping you coordinate instructor schedules.</li>
+                        <li><strong>holdValue:</strong> "holdValue" is a binary option (1 or 0) that allows you to indicate whether a class section should remain in its current time slot ("1" for holding) or be subject to rescheduling ("0" for not holding).</li>
+                        <li><strong>Restrictions:</strong> This will indicate which classes are set not to be in the same timeslot as the current section</li>
+                        <li><strong>Blocked Time Slots:</strong> This column enables you to specify time slots during which a class section should not be scheduled, preventing unwanted scheduling conflicts.</li>
+                        <li><strong>Select:</strong> The "Select" column includes checkboxes that allow you to select specific class sections that you do not want scheduled together</li>
+                        <li><strong>Actions:</strong> The "Actions" column has button that will link check clases to prevent the scheduling in the same timeslots</li>
+                    </ul>
+              </div>
+        </div>
+    </div>
+    
+
+
+    <!-- Add Sliders for Penalty Parameters -->
+<div class="container mt-3">
+    <h4>Penalty Parameters</h4>
+    <div class="row">
+        <div class="col-md-3">
+            <label for="class-penalty">Avoiding Selected Classes</label>
+            <input type="range" class="form-control" id="class-penalty" min="0" max="1000" value="100">
+        </div>
+        <div class="col-md-3">
+            <label for="move-penalty">Keep 4 credit classes togehter</label>
+            <input type="range" class="form-control" id="move-penalty" min="0" max="10" value="0">
+        </div>
+        <div class="col-md-3">
+            <label for="blocked-slot-penalty">Blocked Slot Penalty:</label>
+            <input type="range" class="form-control" id="blocked-slot-penalty" min="0" max="100" value="100">
+        </div>
+        <div class="col-md-3">
+            <label for="hold-penalty">Hold Penalty(in current slot):</label>
+            <input type="range" class="form-control" id="hold-penalty" min="0" max="10" value="1">
+        </div>
+    </div>
+</div>
+
+<!-- Create a menu -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <!-- ... (rest of your navigation code) ... -->
+</nav>
+
+<!-- Rest of your HTML code remains unchanged -->
 
     <!-- Display the class data -->
     {% if class_sections %}

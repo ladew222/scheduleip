@@ -7,13 +7,11 @@ function valuesToString(arr) {
     return arr.map(obj => obj.value).join('; ');
 }
 
-
 // Function to get the checkbox value (1 or 0)
 function getCheckboxValue($row) {
     const $checkbox = $row.find(".hold-checkbox");
     return $checkbox.prop("checked") ? 1 : 0;
 }
-
 
 
 $(document).ready(function () {
@@ -170,12 +168,23 @@ $(document).ready(function () {
     
             classData.push(rowData);
         });
+
+        // Collect penalty parameters
+        const classPenalty = $('#class-penalty').val();
+        const movePenalty = $('#move-penalty').val();
+        const blockedSlotPenalty = $('#blocked-slot-penalty').val();
+        const holdPenalty = $('#hold-penalty').val();
+        
     
         // Send the data to the server for optimization
         const requestData = {
             classData: classData,
             userBlockedTimes: '',
-        };
+            classPenalty: classPenalty,
+            movePenalty: movePenalty,
+            blockedSlotPenalty: blockedSlotPenalty,
+            holdPenalty: holdPenalty,
+            };
     
         $.ajax({
             type: 'POST',
@@ -184,8 +193,19 @@ $(document).ready(function () {
             contentType: 'application/json',
             success: function (response) {
                 // Handle the optimization results
-                // You can display the results on the page or perform any other actions
                 console.log('Optimization successful:', response);
+                // Display the results in the 'results-list' div
+                $('#results-list').empty(); // Clear any previous results
+                if (response.message === 'Optimization complete') {
+                    $.each(response.results, function (index, result) {
+                        // Append each result to the 'results-list' div
+                        $('#results-list').append('<p>' + result + '</p>');
+                    });
+                } else {
+                    $('#results-list').html('<p>Error: ' + response.error + '</p>');
+                }
+
+
             },
             error: function (error) {
                 console.error('Error:', error);
