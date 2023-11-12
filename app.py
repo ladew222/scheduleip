@@ -227,11 +227,10 @@ def create_class_sections_from_data(class_sections_data):
     for section_data in class_sections_data:
         # Extract data from 'section_data' and create a ClassSection object
         sec_name = section_data.get('section', '')  # Updated to match the new column name
-        
         if sec_name in seen_sec_names:
             # If the section name is already in the set, skip this iteration
             continue
-        
+        seen_sec_names.add(sec_name) # Add the section name to the set
         title = section_data.get('title', '')
         min_credit = section_data.get('minCredit', '')  # Updated to match the new column name
         sec_cap = section_data.get('secCap', '')  # Updated to match the new column name
