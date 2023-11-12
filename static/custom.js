@@ -3,6 +3,12 @@
     return arr.join(delimiter);
 }
 
+// Hold All Button Click Event
+$('#hold-all').on('click', function () {
+    $("tr:has(.restrict-checkbox) .hold-checkbox").prop("checked", true);
+});
+
+
 // Function to create an HTML table from the result array
 function createResultsTable(data) {
     let table = '<table style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">';

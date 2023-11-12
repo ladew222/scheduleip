@@ -88,3 +88,13 @@ input[type="file"], .btn, .form-control, .select2-container {
     display: inline-block; /* Allow it to sit next to other inline elements */
     margin-top: 1rem; /* Space above the button */
 }
+/* Adjust DataTable Search Box and Hold All Button */
+.dataTables_filter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#hold-all {
+    margin-left: 10px; /* Adjust the margin as needed */
+}
