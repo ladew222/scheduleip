@@ -1,3 +1,60 @@
+/* Main container and element widths for a cleaner layout */
+.container {
+    max-width: 1200px; /* Set a max-width for larger screens */
+}
+
+/* Centering buttons and giving them a uniform style */
+.btn {
+    margin: 0 auto;
+    display: block; /* Center the buttons */
+    margin-bottom: 1rem; /* Space below each button */
+}
+
+/* Styling for table and form elements */
+.table {
+    margin-top: 2rem; /* Space above the table */
+    clear: both; /* Clear floated elements */
+}
+
+/* Styling for sliders in the Penalty Parameters section */
+.slider {
+    width: 100%; /* Full width sliders */
+    margin: 1rem 0; /* Space above and below sliders */
+}
+
+/* Center the button and apply constraints within their column */
+#apply-constraints {
+    width: 100%; /* Full width within its column */
+    text-align: center; /* Center text for consistency */
+}
+
+/* Adjust the Help Information button to align with Apply Constraints */
+.help-info-btn {
+    width: 100%; /* Match width with the Apply Constraints button */
+}
+
+/* Card body padding for a better look */
+.card-body {
+    padding: 1rem; /* Padding inside the card for spacing */
+}
+
+/* Consistent styling for all inputs and buttons */
+input[type="file"], .btn, .form-control, .select2-container {
+    border-radius: 0.25rem; /* Rounded corners for inputs and buttons */
+}
+
+/* Customizing the DataTables appearance */
+.dataTables_wrapper {
+    font-size: 0.9rem; /* Smaller font size for DataTables */
+    margin-top: 1rem; /* Space above DataTables */
+}
+
+/* Ensure consistent font size across Select2 dropdowns */
+.select2-container--default .select2-selection--single {
+    font-size: 1rem; /* Match font size with other inputs */
+}
+
+/* Custom styles for the custom-select-width and tagify classes */
 .custom-select-width {
     width: 130px; /* Adjust the width as needed */
 }
@@ -10,3 +67,24 @@
     background-color: #f2f2f2; /* Change background color when dragging */
 }
 
+/* Improve the look of the checkbox and restrict button alignment */
+.hold-checkbox, .restrict-checkbox {
+    margin-right: 0.5rem; /* Space to the right of checkboxes */
+}
+.restrict-button {
+    padding: 0.375rem 0.75rem; /* Padding inside the button */
+}
+
+/* Enhancements for the Optimization Results section */
+#optimization-results {
+    background: #e9ecef; /* Light background color for visibility */
+    border-radius: 0.25rem; /* Rounded corners */
+    padding: 1rem; /* Padding inside the results container */
+    margin-top: 1rem; /* Space above the results container */
+}
+
+/* Button to show table */
+#show-table {
+    display: inline-block; /* Allow it to sit next to other inline elements */
+    margin-top: 1rem; /* Space above the button */
+}

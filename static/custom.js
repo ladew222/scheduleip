@@ -60,6 +60,7 @@ $(document).ready(function () {
                 
 
             }
+            
         });
 
         
@@ -77,6 +78,26 @@ $(document).ready(function () {
                 }
             });
         });
+
+        $(".restrict-checkbox").prop('checked', false);
+    });
+
+    $('#export-csv').on('click', function() {
+        // Extract data from DataTable
+        const data = dataTable.rows().data().toArray();
+        let csvContent = "data:text/csv;charset=utf-8,";
+
+        // Header row
+        csvContent += dataTable.columns().header().toArray().map(e => $(e).text()).join(",") + "\r\n";
+
+        // Data rows
+        data.forEach(function(rowArray) {
+            let row = rowArray.join(",");
+            csvContent += row + "\r\n";
+        });
+
+        // Download the CSV file
+        downloadCSV(csvContent, 'datatable_export.csv');
     });
     
     
@@ -87,7 +108,7 @@ $(document).ready(function () {
     // Initialize DataTable
     const dataTable = $('#class-table').DataTable({
         // DataTable configuration options here
-        paging: true,
+        paging: false,
         searching: true,
         ordering: true,
         columns: [
