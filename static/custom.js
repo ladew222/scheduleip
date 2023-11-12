@@ -32,7 +32,7 @@ $(document).ready(function () {
     const tagifyInstances = {};
 
     $("#show-table").click(function () {
-        $(".class-table").show();
+        $("#class-table").show();
        // $("#optimization-results").hide();
     });
 
@@ -213,8 +213,8 @@ $(document).ready(function () {
             success: function (response) {
                 // Handle the optimization results
                 console.log('Optimization successful:', response);
-                $("#optimization-results").show();
-                $(".class-table").hide();
+                $("#optimization-results").fadeIn(1000); // Fade in slowly over 1 second
+                $("#class-table").fadeOut(1000); // Fade out slowly over 1 second
                 // Display the results in the 'results-list' div
                 $('#results-list').empty(); // Clear any previous results
                 if (response.message === 'Optimization complete') {
@@ -225,8 +225,6 @@ $(document).ready(function () {
                 } else {
                     $('#results-list').html('<p>Error: ' + response.error + '</p>');
                 }
-
-
             },
             error: function (error) {
                 console.error('Error:', error);
