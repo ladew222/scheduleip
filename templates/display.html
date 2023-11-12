@@ -55,7 +55,12 @@
                     <button id="save-schedule" class="btn btn-link nav-link">Save Schedule</button>
                 </li>
                 <li class="nav-item">
-                    <button id="load-schedule" class="btn btn-link nav-link">Load Schedule</button>
+                    <a id="load-schedule" href="/load-schedule" class="btn nav-link">Load Schedule</a> <!-- Changed to an <a> tag with button classes -->
+                </li>
+                <li class="nav-item">
+                    <button type="button" class="btn nav-link" data-toggle="modal" data-target="#exampleModalLong">
+                        Help
+                    </button>
                 </li>
             </ul>
         </div>
@@ -63,48 +68,16 @@
 </nav>
   <input id="file-input" type="file" name="name" style="display: none;" />
 <div class="container mt-5">
-    
     <div class="container mt-5">
-        <div class="row">
-            <!-- Create a 3-column layout for the button -->
-            <div class="col-md-3">
-                <button id="apply-constraints" class="btn btn-primary">Apply Constraints & Optimize</button>
-                <!-- Hold All Button -->
-                <button id="hold-all" class="btn btn-secondary">Hold All</button>
+        <div class="container mt-3">
+            <!-- Button group for Apply Constraints, Hold All, and Help Information -->
+            <div class="d-flex justify-content-between">
+                <button id="apply-constraints" type="button" class="btn btn-primary">Apply Constraints & Optimize</button>
+                <button id="hold-all" type="button" class="btn btn-primary">Hold All</button>
             </div>
-            
-            <!-- Create a 9-column layout for the Bootstrap Collapse component -->
-            <a class="btn btn-primary" data-toggle="collapse" href="#collapseExample" role="button" aria-expanded="false" aria-controls="collapseExample">
-                Help Information
-              </a>
-            </p>
-            <div class="collapse" id="collapseExample">
-              <div class="card card-body">
-                <h4>Table Columns and Options</h4>
-                    <p>The table below provides an overview of class sections and their scheduling details to help you optimize your class schedule effectively:</p>
-
-                    <ul>
-                        <li><strong>Sections:</strong> This column displays the unique section names for each class, allowing you to identify and manage different class sections easily.</li>
-                        <li><strong>Title:</strong> The "Title" column shows the title or name of each class section, helping you distinguish between different courses.</li>
-                        <li><strong>Min Credit:</strong> This column specifies the minimum credit hours required for each class section, aiding in credit-hour allocation.</li>
-                        <li><strong>Sec Cap:</strong> "Sec Cap" stands for Section Capacity, indicating the maximum number of students that can enroll in each class section.</li>
-                        <li><strong>Room:</strong> The "Room" column displays the room or location where the class section is scheduled to take place.</li>
-                        <li><strong>Bldg:</strong> "Bldg" represents the building in which the class section's room is located, helping you locate classes within the campus.</li>
-                        <li><strong>Week Days:</strong> This column lists the days of the week when each class section meets, facilitating schedule planning.</li>
-                        <li><strong>CSM start:</strong> "CSM start" indicates the start time of the class section based on the CSM (Course Scheduling Manager) system.</li>
-                        <li><strong>CSM end:</strong> The "CSM end" column displays the end time of the class section according to the CSM system.</li>
-                        <li><strong>Faculty1:</strong> This column shows the name of the faculty member assigned to teach the class section, helping you coordinate instructor schedules.</li>
-                        <li><strong>holdValue:</strong> "holdValue" is a binary option (1 or 0) that allows you to indicate whether a class section should remain in its current time slot ("1" for holding) or be subject to rescheduling ("0" for not holding).</li>
-                        <li><strong>Restrictions:</strong> This will indicate which classes are set not to be in the same timeslot as the current section</li>
-                        <li><strong>Blocked Time Slots:</strong> This column enables you to specify time slots during which a class section should not be scheduled, preventing unwanted scheduling conflicts.</li>
-                        <li><strong>Select:</strong> The "Select" column includes checkboxes that allow you to select specific class sections that you do not want scheduled together</li>
-                        <li><strong>Actions:</strong> The "Actions" column has button that will link check clases to prevent the scheduling in the same timeslots</li>
-                    </ul>
-              </div>
-        </div>
     </div>
     
-
+            
 
     <!-- Add Sliders for Penalty Parameters -->
 <div class="container mt-3">
@@ -120,7 +93,7 @@
         </div>
         <div class="col-md-3">
             <label for="blocked-slot-penalty">Blocked Slot Penalty:</label>
-            <input type="range" class="form-control" id="blocked-slot-penalty" min="0" max="100" value="1000">
+            <input type="range" class="form-control" id="blocked-slot-penalty" min="0" max="1000" value="100">
         </div>
         <div class="col-md-3">
             <label for="hold-penalty">Hold Penalty(in current slot):</label>
@@ -217,5 +190,47 @@
         <a id="show-table" href="#">Show Input Table</a>
     </div>
 </div>
+
+<!-- Modal -->
+<div class="modal fade" id="exampleModalLong" tabindex="-1" role="dialog" aria-labelledby="exampleModalLongTitle" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLongTitle">Modal title</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+            <h4>Table Columns and Options</h4>
+            <p>The table below provides an overview of class sections and their scheduling details to help you optimize your class schedule effectively:</p>
+
+                <ul>
+                    <li><strong>Sections:</strong> This column displays the unique section names for each class, allowing you to identify and manage different class sections easily.</li>
+                    <li><strong>Title:</strong> The "Title" column shows the title or name of each class section, helping you distinguish between different courses.</li>
+                    <li><strong>Min Credit:</strong> This column specifies the minimum credit hours required for each class section, aiding in credit-hour allocation.</li>
+                    <li><strong>Sec Cap:</strong> "Sec Cap" stands for Section Capacity, indicating the maximum number of students that can enroll in each class section.</li>
+                    <li><strong>Room:</strong> The "Room" column displays the room or location where the class section is scheduled to take place.</li>
+                    <li><strong>Bldg:</strong> "Bldg" represents the building in which the class section's room is located, helping you locate classes within the campus.</li>
+                    <li><strong>Week Days:</strong> This column lists the days of the week when each class section meets, facilitating schedule planning.</li>
+                    <li><strong>CSM start:</strong> "CSM start" indicates the start time of the class section based on the CSM (Course Scheduling Manager) system.</li>
+                    <li><strong>CSM end:</strong> The "CSM end" column displays the end time of the class section according to the CSM system.</li>
+                    <li><strong>Faculty1:</strong> This column shows the name of the faculty member assigned to teach the class section, helping you coordinate instructor schedules.</li>
+                    <li><strong>holdValue:</strong> "holdValue" is a binary option (1 or 0) that allows you to indicate whether a class section should remain in its current time slot ("1" for holding) or be subject to rescheduling ("0" for not holding).</li>
+                    <li><strong>Restrictions:</strong> This will indicate which classes are set not to be in the same timeslot as the current section</li>
+                    <li><strong>Blocked Time Slots:</strong> This column enables you to specify time slots during which a class section should not be scheduled, preventing unwanted scheduling conflicts.</li>
+                    <li><strong>Select:</strong> The "Select" column includes checkboxes that allow you to select specific class sections that you do not want scheduled together</li>
+                    <li><strong>Actions:</strong> The "Actions" column has button that will link check clases to prevent the scheduling in the same timeslots</li>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary">Save changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
 </body>
 </html>

@@ -3,10 +3,29 @@
     return arr.join(delimiter);
 }
 
-// Hold All Button Click Event
-$('#hold-all').on('click', function () {
-    $("tr:has(.restrict-checkbox) .hold-checkbox").prop("checked", true);
-});
+
+// Function to convert an array of objects to a CSV string
+function convertToCSV(objArray) {
+    const array = typeof objArray !== 'object' ? JSON.parse(objArray) : objArray;
+    let str = `${Object.keys(array[0]).map(value => `"${value}"`).join(",")}` + '\r\n';
+
+    return array.reduce((str, next) => {
+        str += `${Object.values(next).map(value => `"${value}"`).join(",")}` + '\r\n';
+        return str;
+    }, str);
+}
+
+// Function to download the CSV string as a file
+function downloadCSV(csvContent, fileName) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
 
 
 // Function to create an HTML table from the result array
@@ -36,6 +55,45 @@ function getCheckboxValue($row) {
 
 $(document).ready(function () {
     const tagifyInstances = {};
+
+    // Hold All Button Click Event
+    $('#hold-all').on('click', function () {
+        $(".hold-checkbox").prop("checked", true);
+    });
+
+
+
+    // Function to gather data from the table and initiate the CSV download
+    $('#save-schedule').on('click', function() {
+        const classData = [];
+        $('#class-table-body tr').each(function() {
+            const rowDataTags = tagifyInstances[$(this).data('section-title')].value;
+            let restrictionsResultString = valuesToString(rowDataTags);
+            const holdValue = getCheckboxValue($(this));
+
+            const rowData = {
+                section: $(this).find('td:eq(0)').text(),
+                title: $(this).find('td:eq(1)').text(),
+                minCredit: $(this).find('td:eq(2)').text(),
+                secCap: $(this).find('td:eq(3)').text(),
+                room: $(this).find('td:eq(4)').text(),
+                bldg: $(this).find('td:eq(5)').text(),
+                weekDays: $(this).find('td:eq(6)').text(),
+                csmStart: $(this).find('td:eq(7)').text(),
+                csmEnd: $(this).find('td:eq(8)').text(),
+                faculty1: $(this).find('td:eq(9)').text(),
+                hold: holdValue,
+                restrictions: restrictionsResultString,
+                blockedTimeSlots: arrayToString($(this).find('td:eq(12) select').val() || [], ';'),
+            };
+
+            classData.push(rowData);
+        });
+
+        const csvData = convertToCSV(classData);
+        downloadCSV(csvData, 'class_schedule.csv');
+    });
+
 
     $("#show-table").click(function () {
         $("#class-table").show();
