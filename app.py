@@ -222,9 +222,16 @@ class ClassSection:
 # Function to create ClassSection objects from data
 def create_class_sections_from_data(class_sections_data):
     class_sections = []
+    seen_sec_names = set()  # Initialize a set to keep track of section names
+    
     for section_data in class_sections_data:
         # Extract data from 'section_data' and create a ClassSection object
         sec_name = section_data.get('section', '')  # Updated to match the new column name
+        
+        if sec_name in seen_sec_names:
+            # If the section name is already in the set, skip this iteration
+            continue
+        
         title = section_data.get('title', '')
         min_credit = section_data.get('minCredit', '')  # Updated to match the new column name
         sec_cap = section_data.get('secCap', '')  # Updated to match the new column name
@@ -309,9 +316,11 @@ def optimize_schedule(class_sections, meeting_times):
     # Objective function: Minimize the total number of scheduled classes
     prob += pulp.lpSum(x[cls.sec_name,tsl] for cls in class_sections for tsl in timeslots)
     
-   # Constraint: Each timeslot can only have one class
-    for tsl in timeslots:
-        prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if (cls.sec_name, tsl) in x) == 1, f"OneClassPerSlotConstraint_{tsl}"
+    
+     # Constraint: Each class must take exactly one timeslot
+    for cls in class_sections:
+        unique_constraint_name = f"OneClassOneSlotConstraint_{cls.sec_name}"  # Generate a unique constraint name
+        prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots if (cls.sec_name, tsl) in x) == 1, unique_constraint_name
 
 
     # Assuming 'instructors' is a list of all unique instructors
@@ -333,6 +342,20 @@ def optimize_schedule(class_sections, meeting_times):
                     constraint_counter += 1
                     constraint_name = f"AvoidClassesPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
                     prob += x[cls.sec_name, tsl] + x[other_cls_name, tsl] <= 1, constraint_name
+
+
+    # Penalty for avoiding timeslots
+    constraint_counter = 0  # Initialize a counter for constraint names
+    hold_penalty = 1 # Adjust the penalty weight as needed
+    
+    # Penalty for moving a class outside its known timeslot when holdValue is 1
+    for cls in class_sections:
+        if cls.holdValue == 1:
+            for tsl in timeslots:
+                if (cls.sec_name, tsl) not in x and int(tsl.split("_")[-1]) not in cls.assigned_meeting_time_indices:
+                    constraint_counter += hold_penalty
+                    constraint_name = f"MoveClassPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
+                    prob += x[cls.sec_name, tsl] == 0, constraint_name
 
 
 
@@ -380,7 +403,7 @@ def optimize():
     meeting_times = create_meeting_times()
 
     # Optimize the schedule based on the received data
-    optimized_class_sections = optimize_schedule(class_sections, meeting_times)
+    optimized_class_sections = optimize_schedule(adjusted_class_sections, meeting_times)
 
     if optimized_class_sections is not None:
         # Prepare the optimization results
