@@ -31,6 +31,11 @@ function getCheckboxValue($row) {
 $(document).ready(function () {
     const tagifyInstances = {};
 
+    $("#show-table").click(function () {
+        $(".class-table").show();
+       // $("#optimization-results").hide();
+    });
+
     $(".restrict-button").click(function () {
         // Get all rows with checkboxes
         var $rowsWithCheckboxes = $("tr:has(.restrict-checkbox)");
@@ -209,6 +214,7 @@ $(document).ready(function () {
                 // Handle the optimization results
                 console.log('Optimization successful:', response);
                 $("#optimization-results").show();
+                $(".class-table").hide();
                 // Display the results in the 'results-list' div
                 $('#results-list').empty(); // Clear any previous results
                 if (response.message === 'Optimization complete') {
