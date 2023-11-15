@@ -214,6 +214,7 @@ class ClassSection:
         self.csm_end = csm_end
         self.faculty1 = faculty1
         self.holdValue = holdValue
+        self.slots = min_credit
 
         # List of classes to avoid
         self.avoid_classes = []
@@ -290,6 +291,7 @@ class ClassSection:
             'holdValue': self.holdValue,
             'avoid_classes': self.avoid_classes,
             'restrictions': self.unwanted_timeslots,
+            'slots': self.slots,
             'blocked_time_slots': self.blocked_time_slots
         }
         
@@ -306,6 +308,7 @@ class ClassSection:
             csm_end=self.csm_end,
             faculty1=self.faculty1,
             holdValue=self.holdValue,
+            slots=self.slots,
             restrictions=self.avoid_classes.copy() if self.avoid_classes else None,
             assigned_meeting_time_indices=self.assigned_meeting_time_indices.copy() if self.assigned_meeting_time_indices else None
         )
@@ -405,7 +408,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
 
     # Constraint: Each class must take exactly one timeslot per credit
     for cls in class_sections:
-        num_credits = cls.credit
+        num_credits = cls.slots
         prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
 
 
