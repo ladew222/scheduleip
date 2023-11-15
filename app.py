@@ -214,7 +214,7 @@ class ClassSection:
         self.csm_end = csm_end
         self.faculty1 = faculty1
         self.holdValue = holdValue
-        self.slots = min_credit
+        self.hours = min_credit
 
         # List of classes to avoid
         self.avoid_classes = []
@@ -291,7 +291,7 @@ class ClassSection:
             'holdValue': self.holdValue,
             'avoid_classes': self.avoid_classes,
             'restrictions': self.unwanted_timeslots,
-            'slots': self.slots,
+            'hours': self.hours,
             'blocked_time_slots': self.blocked_time_slots
         }
         
@@ -308,7 +308,7 @@ class ClassSection:
             csm_end=self.csm_end,
             faculty1=self.faculty1,
             holdValue=self.holdValue,
-            slots=self.slots,
+            hours=self.hours,
             restrictions=self.avoid_classes.copy() if self.avoid_classes else None,
             assigned_meeting_time_indices=self.assigned_meeting_time_indices.copy() if self.assigned_meeting_time_indices else None
         )
@@ -406,10 +406,18 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     # Objective function: Minimize the total number of scheduled classes
     prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for cls in class_sections for mt in meeting_times)
 
-    # Constraint: Each class must take exactly one timeslot per credit
+    # Constraint: Each class must take exactly one timeslot per hour
     for cls in class_sections:
-        num_credits = cls.slots
-        prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
+        num_credits = cls.hours  # Assuming 'hours' represents the number of credit hours
+        total_credits = pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times)
+        
+        if 'MWF' in cls.week_days:
+            prob += total_credits == num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
+        elif 'TTh' in cls.week_days:
+            prob += total_credits == 1.5 * num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
+        else:
+            # Handle other cases (if necessary)
+            pass
 
 
     # Constraint: An instructor can only teach one class per timeslot
@@ -442,7 +450,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     credit_3_sections_TTh = []
 
     # Assuming class_sections is a list of class sections with credit values
-    credit_3_sections = [cls for cls in class_sections if cls.credit == 3]
+    credit_3_sections = [cls for cls in class_sections if cls.credit >= 3]
 
     for cls in credit_3_sections:
         congruent_days = pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times)
