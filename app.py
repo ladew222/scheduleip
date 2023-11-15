@@ -215,6 +215,7 @@ class ClassSection:
         self.faculty1 = faculty1
         self.holdValue = holdValue
         self.hours = min_credit
+        
 
         # List of classes to avoid
         self.avoid_classes = []
@@ -308,7 +309,6 @@ class ClassSection:
             csm_end=self.csm_end,
             faculty1=self.faculty1,
             holdValue=self.holdValue,
-            hours=self.hours,
             restrictions=self.avoid_classes.copy() if self.avoid_classes else None,
             assigned_meeting_time_indices=self.assigned_meeting_time_indices.copy() if self.assigned_meeting_time_indices else None
         )
@@ -395,6 +395,14 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
+    #So, in simple terms, the optimization process examines each class, 
+    # takes into account its properties and constraints, and tries to find 
+    # the best schedule by adjusting the schedule to minimize the total number
+    # of scheduled classes while satisfying all the constraints and considering 
+    # any penalties or incentives you've defined.
+    #
+    #
+    
     # Create a LP problem instance
     prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize)
 
@@ -450,7 +458,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     credit_3_sections_TTh = []
 
     # Assuming class_sections is a list of class sections with credit values
-    credit_3_sections = [cls for cls in class_sections if cls.credit >= 3]
+    credit_3_sections = [cls for cls in class_sections if int(cls.min_credit) >= 3]
 
     for cls in credit_3_sections:
         congruent_days = pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times)
@@ -493,8 +501,19 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
 
     # Solve the problem
     prob.solve()
+    
+    # Check the status of the solver
+    if prob.status == pulp.LpStatusOptimal:
+        print("Optimal solution found.")
+        # Retrieve the values of decision variables (x)
+        for var in prob.variables():
+            if var.varValue == 1:
+                print(f"{var.name}: {var.varValue}")
+    else:
+        print("Solver did not find an optimal solution.")
 
     # Create a list to store the scheduled class sections
+    # Initialize a list to store scheduled sections
     scheduled_sections = []
 
     # Output the results and store scheduled sections
@@ -519,7 +538,8 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     else:
         optimization_results['status'] = 'Optimization failed'
 
-    # Return the
+    # Return the optimization_results dictionary
+    return jsonify(optimization_results)
 
 
 
