@@ -9,82 +9,192 @@ import pandas as pd
 from io import StringIO
 app = Flask(__name__)
 
-
 def create_meeting_times():
-        your_meeting_time_data = [
+    your_meeting_time_data = [
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '8:00AM',
             'end_time': '8:55AM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '9:05AM',
             'end_time': '10:00AM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '10:10AM',
             'end_time': '11:05AM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '11:15AM',
             'end_time': '12:10PM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '12:20PM',
             'end_time': '1:15PM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '1:25PM',
             'end_time': '2:20PM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '2:30PM',
             'end_time': '3:25PM',
         },
         {
-            'days': 'M W F',
+            'days': 'M',
             'start_time': '3:35PM',
             'end_time': '4:30PM',
         },
         {
-            'days': 'Tu Th',
+            'days': 'W',
+            'start_time': '8:00AM',
+            'end_time': '8:55AM',
+        },
+        {
+            'days': 'W',
+            'start_time': '9:05AM',
+            'end_time': '10:00AM',
+        },
+        {
+            'days': 'W',
+            'start_time': '10:10AM',
+            'end_time': '11:05AM',
+        },
+        {
+            'days': 'W',
+            'start_time': '11:15AM',
+            'end_time': '12:10PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '12:20PM',
+            'end_time': '1:15PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '1:25PM',
+            'end_time': '2:20PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '2:30PM',
+            'end_time': '3:25PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '3:35PM',
+            'end_time': '4:30PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '8:00AM',
+            'end_time': '8:55AM',
+        },
+        {
+            'days': 'F',
+            'start_time': '9:05AM',
+            'end_time': '10:00AM',
+        },
+        {
+            'days': 'F',
+            'start_time': '10:10AM',
+            'end_time': '11:05AM',
+        },
+        {
+            'days': 'F',
+            'start_time': '11:15AM',
+            'end_time': '12:10PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '12:20PM',
+            'end_time': '1:15PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '1:25PM',
+            'end_time': '2:20PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '2:30PM',
+            'end_time': '3:25PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '3:35PM',
+            'end_time': '4:30PM',
+        },
+        {
+            'days': 'Tu',
             'start_time': '8:00AM',
             'end_time': '9:20AM',
         },
         {
-            'days': 'Tu Th',
+            'days': 'Tu',
             'start_time': '9:30AM',
             'end_time': '10:50AM',
         },
         {
-            'days': 'Tu Th',
+            'days': 'Tu',
             'start_time': '11:00AM',
             'end_time': '12:20PM',
         },
         {
-            'days': 'Tu Th',
+            'days': 'Tu',
             'start_time': '12:30PM',
             'end_time': '1:50PM',
         },
         {
-            'days': 'Tu Th',
+            'days': 'Tu',
             'start_time': '2:00PM',
             'end_time': '3:20PM',
         },
         {
-            'days': 'Tu Th',
+            'days': 'Tu',
+            'start_time': '3:30PM',
+            'end_time': '4:50PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '8:00AM',
+            'end_time': '9:20AM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '9:30AM',
+            'end_time': '10:50AM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '11:00AM',
+            'end_time': '12:20PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '12:30PM',
+            'end_time': '1:50PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '2:00PM',
+            'end_time': '3:20PM',
+        },
+        {
+            'days': 'Th',
             'start_time': '3:30PM',
             'end_time': '4:50PM',
         },
     ]
 
-        return your_meeting_time_data
+    return your_meeting_time_data
+
     
 
 
@@ -280,124 +390,110 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 
+
 def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
-    
-    
-    
-    
-    
-    linked_sections = []
-
-    for class_section in class_sections:
-        sec_name = class_section.sec_name
-
-        # Check if the section name ends with "_ex"
-        if sec_name.endswith("_ex"):
-            # Extract the base section name (without "_ex")
-            base_sec_name = sec_name[:-3]
-
-            # Find the corresponding "_ex" section, if it exists
-            corresponding_ex_section = next((cls for cls in class_sections if cls.sec_name == base_sec_name), None)
-
-            if corresponding_ex_section:
-                linked_sections.append((corresponding_ex_section, class_section))
-        
-    
-    
-    instructors = set(cls.faculty1 for cls in class_sections)
     # Create a LP problem instance
-    timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in meeting_times]
-    
-    # Create a LP problem instance
-    prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize) 
-    
-    
-    # Create binary variables: x_ij = 1 if class i is in timeslot j 
-    x = pulp.LpVariable.dicts("x", 
-                            ((cls.sec_name, tsl) for cls in class_sections for tsl in timeslots),
-                            cat='Binary')
+    prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize)
+
+    # Create binary variables: x_ij = 1 if class i is in timeslot j
+    x = pulp.LpVariable.dicts("x",
+                              ((cls.sec_name, mt['days'], mt['start_time']) for cls in class_sections for mt in meeting_times),
+                              cat='Binary')
 
     # Objective function: Minimize the total number of scheduled classes
-    prob += pulp.lpSum(x[cls.sec_name,tsl] for cls in class_sections for tsl in timeslots)
-    
-    
-     # Constraint: Each class must take exactly one timeslot
+    prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for cls in class_sections for mt in meeting_times)
+
+    # Constraint: Each class must take exactly one timeslot per credit
     for cls in class_sections:
-        unique_constraint_name = f"OneClassOneSlotConstraint_{cls.sec_name}"  # Generate a unique constraint name
-        prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots if (cls.sec_name, tsl) in x) == 1, unique_constraint_name
-
-
-    # Assuming 'instructors' is a list of all unique instructors
-    instructors = set(cls.faculty1 for cls in class_sections)
+        num_credits = cls.credit
+        prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
 
 
     # Constraint: An instructor can only teach one class per timeslot
-    for tsl in timeslots:
+    instructors = set(cls.faculty1 for cls in class_sections)
+    for mt in meeting_times:
         for instructor in instructors:
-            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.faculty1 == instructor and (cls.sec_name, tsl) in x) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{tsl}"
-            
-   # Penalty for avoiding classes in the same timeslot
-    penalty = class_penalty  # Adjust the penalty weight as needed
-    constraint_counter = 0  # Initialize a counter for constraint names
-    for cls in class_sections:
-        for tsl in timeslots:
-            for other_cls_name in cls.avoid_classes:
-                if (other_cls_name, tsl) in x:
-                    constraint_counter += 1
-                    constraint_name = f"AvoidClassesPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
-                    prob += x[cls.sec_name, tsl] + x[other_cls_name, tsl] <= 1, constraint_name
+            prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for cls in class_sections if cls.faculty1 == instructor) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{mt['days']}_{mt['start_time']}"
 
+    # Penalty for avoiding classes in the same timeslot
+    for cls in class_sections:
+        for mt in meeting_times:
+            for other_cls_name in cls.avoid_classes:
+                prob += x[cls.sec_name, mt['days'], mt['start_time']] + x[other_cls_name, mt['days'], mt['start_time']] <= 1, f"AvoidClassesPenalty_{cls.sec_name}_{other_cls_name}_{mt['days']}_{mt['start_time']}"
 
     # Penalty for avoiding timeslots
-    constraint_counter = 0  # Initialize a counter for constraint names
-    #hold_penalty = hold_penalty # Adjust the penalty weight as needed
-    
+    for cls in class_sections:
+        for mt in meeting_times:
+            if mt['days'] + ' ' + mt['start_time'] in cls.unwanted_timeslots:
+                prob += x[cls.sec_name, mt['days'], mt['start_time']] == 0, f"BlockedTimeSlotPenalty_{cls.sec_name}_{mt['days']}_{mt['start_time']}"
+
     # Penalty for moving a class outside its known timeslot when holdValue is 1
     for cls in class_sections:
         if cls.holdValue == 1:
-            for tsl in timeslots:
-                if (cls.sec_name, tsl) not in x and int(tsl.split("_")[-1]) not in cls.assigned_meeting_time_indices:
-                    constraint_counter += hold_penalty
-                    constraint_name = f"MoveClassPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
-                    prob += x[cls.sec_name, tsl] == 0, constraint_name
+            for mt in meeting_times:
+                if mt['days'] + ' ' + mt['start_time'] not in cls.assigned_meeting_times:
+                    prob += x[cls.sec_name, mt['days'], mt['start_time']] == 0, f"MoveClassPenalty_{cls.sec_name}_{mt['days']}_{mt['start_time']}"
 
+    # Separate 3-credit classes into MWF and TTh categories based on the number of congruent days
+    credit_3_sections_MWF = []
+    credit_3_sections_TTh = []
 
-     # Additional penalty for blocked_time_slots
-    blocked_slot_penalty = blocked_slot_penalty  # Adjust the penalty weight as needed
-    for cls in class_sections:
-        for tsl in timeslots:
-            if tsl in cls.unwanted_timeslots:
-                prob += x[cls.sec_name, tsl] == 0, f"BlockedTimeSlotPenalty_{cls.sec_name}_{tsl}"
+    # Assuming class_sections is a list of class sections with credit values
+    credit_3_sections = [cls for cls in class_sections if cls.credit == 3]
 
-    
-    # Calculate the penalty for keeping linked sections together
-    linked_sections_penalty = 0  # Initialize the penalty
-    for cls_A, cls_B in linked_sections:
-        for tsl in timeslots:
-            # Calculate the absolute difference in indexes of cls_A and cls_B
-            index_diff = abs(class_sections.index(cls_A) - class_sections.index(cls_B)) * move_penalty
-            index_diff = int(index_diff)
-            # Add the penalty to the objective function
-            prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] <= 1 + index_diff, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
+    for cls in credit_3_sections:
+        congruent_days = pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times)
+        if congruent_days == 3:
+            credit_3_sections_MWF.append(cls)
+        elif congruent_days == 2:
+            credit_3_sections_TTh.append(cls)
 
-            # Update the linked_sections_penalty based on the index_diff
-            linked_sections_penalty += index_diff * x[cls_A.sec_name, tsl] + index_diff * x[cls_B.sec_name, tsl]
+    # Create constraints for MWF classes
+    for cls in credit_3_sections_MWF:
+        prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == 3, f"CongruentDaysConstraint_MWF_{cls.sec_name}"
 
-        
+    # Create constraints for TTh classes
+    for cls in credit_3_sections_TTh:
+        prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == 2, f"CongruentDaysConstraint_TTh_{cls.sec_name}"
+
+    # Ensure that timeslots for 3-credit classes are consecutive on MWF
+    for cls in credit_3_sections_MWF:
+        # Collect the timeslots for the current class
+        timeslots = [(mt['days'], mt['start_time']) for mt in meeting_times if pulp.value(x[cls.sec_name, mt['days'], mt['start_time']]) == 1]
+
+        # Ensure that all timeslots have the same start time
+        start_time_set = set(start_time for _, start_time in timeslots)
+
+        if len(start_time_set) > 1:
+            # Add a constraint to ensure all timeslots have the same start time
+            prob += pulp.lpSum(x[cls.sec_name, day, start_time] for day, start_time in timeslots) == len(timeslots), f"ConsecutiveTimeSlots_MWF_{cls.sec_name}"
+
+    # Ensure that timeslots for 3-credit classes are consecutive on TTh
+    for cls in credit_3_sections_TTh:
+        # Collect the timeslots for the current class
+        timeslots = [(mt['days'], mt['start_time']) for mt in meeting_times if pulp.value(x[cls.sec_name, mt['days'], mt['start_time']]) == 1]
+
+        # Ensure that all timeslots have the same start time
+        start_time_set = set(start_time for _, start_time in timeslots)
+
+        if len(start_time_set) > 1:
+            # Add a constraint to ensure all timeslots have the same start time
+            prob += pulp.lpSum(x[cls.sec_name, day, start_time] for day, start_time in timeslots) == len(timeslots), f"ConsecutiveTimeSlots_TTh_{cls.sec_name}"
+
     # Solve the problem
     prob.solve()
-
 
     # Create a list to store the scheduled class sections
     scheduled_sections = []
 
     # Output the results and store scheduled sections
     for cls in class_sections:
-        for tsl in timeslots:
-            if pulp.value(x[cls.sec_name, tsl]) == 1:
+        for mt in meeting_times:
+            if pulp.value(x[cls.sec_name, mt['days'], mt['start_time']]) == 1:
                 scheduled_sections.append({
                     'section_name': cls.sec_name,
-                    'timeslot': tsl,
+                    'days': mt['days'],
+                    'start_time': mt['start_time'],
                 })
 
     # Create a dictionary to store optimization results
@@ -412,8 +508,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     else:
         optimization_results['status'] = 'Optimization failed'
 
-    # Return the optimization results
-    return optimization_results
+    # Return the
 
 
 
