@@ -34,7 +34,7 @@ function createResultsTable(data) {
     table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Day</th><th>Timeslot</th></tr>';
 
     data.forEach(item => {
-        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.days}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.start_time}</td></tr>`;
+        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.start_time}</td></tr>`;
     });
 
     table += '</table>';

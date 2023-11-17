@@ -197,7 +197,11 @@ def create_meeting_times():
 
     
 
-
+def split_timeslot(tsl):
+    # Splits the timeslot string into day and time components
+    # For example, 'F - 3:30PM' -> ('F', '3:30PM')
+    parts = tsl.split(' - ')
+    return parts[0], parts[1] if len(parts) == 2 else ('', '')
 
 
     
@@ -320,30 +324,37 @@ class ClassSection:
 def create_class_sections_from_data(class_sections_data):
     class_sections = []
     seen_sec_names = set()  # Initialize a set to keep track of section names
-    
+    valid_days = set(['M', 'W', 'F', 'Tu', 'Th'])  # Set of valid days
+
     for section_data in class_sections_data:
-        # Extract data from 'section_data' and create a ClassSection object
-        sec_name = section_data.get('section', '')  # Updated to match the new column name
-        if sec_name in seen_sec_names:
-            # If the section name is already in the set, skip this iteration
-            continue
-        seen_sec_names.add(sec_name) # Add the section name to the set
-        title = section_data.get('title', '')
-        min_credit = section_data.get('minCredit', '')  # Updated to match the new column name
-        sec_cap = section_data.get('secCap', '')  # Updated to match the new column name
-        room = section_data.get('room', '')
-        bldg = section_data.get('bldg', '')
-        week_days = section_data.get('weekDays', '')  # Updated to match the new column name
-        csm_start = section_data.get('csmStart', '')  # Updated to match the new column name
-        csm_end = section_data.get('csmEnd', '')  # Updated to match the new column name
-        faculty1 = section_data.get('faculty1', '')  # Updated to match the new column name
-        holdValue = section_data.get('hold', '')  # Updated to match the new column name
-        restrictions = section_data.get('restrictions', '')
-        blocked_time_slots = section_data.get('blockedTimeSlots', '')  # Updated to match the new column name
-        class_section = ClassSection(sec_name, title, min_credit, sec_cap, room, bldg, week_days, csm_start, csm_end, faculty1, holdValue ,restrictions,blocked_time_slots)
-        class_sections.append(class_section)
+        sec_name = section_data.get('section', '')
+        week_days = section_data.get('weekDays', '').split()
+
+        # Check if the section name is unique and week_days contain any valid days
+        if sec_name not in seen_sec_names and any(day in valid_days for day in week_days):
+            seen_sec_names.add(sec_name)  # Add the section name to the set
+
+            # Extract other data from 'section_data' and create a ClassSection object
+            title = section_data.get('title', '')
+            min_credit = section_data.get('minCredit', '')
+            sec_cap = section_data.get('secCap', '')
+            room = section_data.get('room', '')
+            bldg = section_data.get('bldg', '')
+            csm_start = section_data.get('csmStart', '')
+            csm_end = section_data.get('csmEnd', '')
+            faculty1 = section_data.get('faculty1', '')
+            holdValue = section_data.get('hold', '')
+            restrictions = section_data.get('restrictions', '')
+            blocked_time_slots = section_data.get('blockedTimeSlots', '')
+
+            # Reconstruct week_days as a string
+            week_days_str = ' '.join(week_days)
+            
+            class_section = ClassSection(sec_name, title, min_credit, sec_cap, room, bldg, week_days_str, csm_start, csm_end, faculty1, holdValue, restrictions, blocked_time_slots)
+            class_sections.append(class_section)
 
     return class_sections
+
 
 
 
@@ -361,6 +372,9 @@ def update_class_sections_with_schedule(class_sections, class_timeslots, meeting
         class_timeslots (dict): Dictionary of LpVariable binary variables representing class timeslots.
         meeting_times (MeetingTimes): Object containing meeting time data.
     """
+    
+
+
     for class_section in class_sections:
         for day in ["MWF", "TTh"]:
             for start_time in meeting_times.choose_time_blocks(class_section.days, class_section.credits):
@@ -394,154 +408,130 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 
-def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
-    #So, in simple terms, the optimization process examines each class, 
-    # takes into account its properties and constraints, and tries to find 
-    # the best schedule by adjusting the schedule to minimize the total number
-    # of scheduled classes while satisfying all the constraints and considering 
-    # any penalties or incentives you've defined.
-    #
-    #
+def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty,
+                      enable_unique_class_constraint=True, 
+                      enable_instructor_constraint=True, 
+                      enable_avoid_classes_penalty=True,
+                      enable_avoid_timeslot_penalty=True, 
+                      enable_move_class_penalty=False, 
+                      enable_linked_sections_penalty=False,
+                      enable_single_class_instance_constraint=True):
     
-    # Create a LP problem instance
-    prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize)
+    # ... (initial setup, linked_sections handling remains the same)
 
-    # Create binary variables: x_ij = 1 if class i is in timeslot j
-    x = pulp.LpVariable.dicts("x",
-                              ((cls.sec_name, mt['days'], mt['start_time']) for cls in class_sections for mt in meeting_times),
-                              cat='Binary')
+    instructors = set(cls.faculty1 for cls in class_sections)
+
+    # Create time slots for each day and start time
+    timeslots = [f"{day} - {mt['start_time']}" for mt in meeting_times for day in ['M', 'Tu', 'W', 'Th', 'F']]  # Adjust days as needed
+    
+    prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize)
+    
+    # Create binary variables: x_ij = 1 if class i is in timeslot j on day d
+    x = pulp.LpVariable.dicts("x", 
+                            ((cls.sec_name, tsl) for cls in class_sections for tsl in timeslots),
+                            cat='Binary')
 
     # Objective function: Minimize the total number of scheduled classes
-    prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for cls in class_sections for mt in meeting_times)
+    prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections for tsl in timeslots)
 
-    # Constraint: Each class must take exactly one timeslot per hour
-    for cls in class_sections:
-        num_credits = cls.hours  # Assuming 'hours' represents the number of credit hours
-        total_credits = pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times)
-        
-        if 'MWF' in cls.week_days:
-            prob += total_credits == num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
-        elif 'TTh' in cls.week_days:
-            prob += total_credits == 1.5 * num_credits, f"OneClassOneSlotPerCreditConstraint_{cls.sec_name}"
-        else:
-            # Handle other cases (if necessary)
-            pass
+
+    # Constraint: Only one instance of a class can be scheduled per timeslot
+    if enable_single_class_instance_constraint:
+        constraint_counter = 0
+        sec_names = set(cls.sec_name for cls in class_sections)  # Extract unique class names
+        for class_name in sec_names:
+            for tsl in timeslots:
+                constraint_counter += 1
+                sections_of_class = [cls for cls in class_sections if cls.sec_name == class_name]
+                constraint_name = f"SingleClassInstancePerTimeslot_{class_name}_{tsl}_{constraint_counter}"
+                prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in sections_of_class) <= 1, constraint_name
+
+    # Modified Constraint: Each class must take exactly one timeslot per credit hour
+    if enable_unique_class_constraint:
+        # Credit Hour Coverage Constraint
+        for cls in class_sections:
+            # Timeslots split by days
+           mwf_timeslots = [tsl for tsl in timeslots if split_timeslot(tsl)[0] in ['M', 'W', 'F']]
+           tu_th_timeslots = [tsl for tsl in timeslots if split_timeslot(tsl)[0] in ['Tu', 'Th']]
+
+        # Sum of credit hours scheduled for each class
+        mwf_timeslots = [tsl for tsl in timeslots if split_timeslot(tsl)[0] in ['M', 'W', 'F']]
+        tu_th_timeslots = [tsl for tsl in timeslots if split_timeslot(tsl)[0] in ['Tu', 'Th']]
+        total_credits = mwf_timeslots + tu_th_timeslots 
+
+        prob += total_credits >= int(cls.min_credit), f"TotalCreditsCoverage_{cls.sec_name}"
 
 
     # Constraint: An instructor can only teach one class per timeslot
-    instructors = set(cls.faculty1 for cls in class_sections)
-    for mt in meeting_times:
-        for instructor in instructors:
-            prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for cls in class_sections if cls.faculty1 == instructor) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{mt['days']}_{mt['start_time']}"
+    if enable_instructor_constraint:
+        global_constraint_id = 0  # Global counter for constraint names
+        for tsl in timeslots:
+            for instructor in instructors:
+                global_constraint_id += 1
+                for cls in class_sections:
+                    if cls.faculty1 == instructor:
+                        constraint_name = f"OneClassPerInstructorPerSlot_{instructor}_{cls.sec_name}_{tsl}_{global_constraint_id}"
+                        prob += x[cls.sec_name, tsl] <= 1, constraint_name
 
-    
 
     # Penalty for avoiding classes in the same timeslot
-    for cls in class_sections:
-        for mt in meeting_times:
-            for other_cls_name in cls.avoid_classes:
-                prob += x[cls.sec_name, mt['days'], mt['start_time']] + x[other_cls_name, mt['days'], mt['start_time']] <= 1, f"AvoidClassesPenalty_{cls.sec_name}_{other_cls_name}_{mt['days']}_{mt['start_time']}"
+    if enable_avoid_classes_penalty:
+        for cls in class_sections:
+            for tsl in timeslots:
+                for other_cls_name in cls.avoid_classes:
+                    prob += x[cls.sec_name, tsl] + x.get(other_cls_name, tsl, 0) <= 1, f"AvoidClassesPenalty_{cls.sec_name}_{other_cls_name}_{tsl}"
 
     # Penalty for avoiding timeslots
-    for cls in class_sections:
-        for mt in meeting_times:
-            if mt['days'] + ' ' + mt['start_time'] in cls.unwanted_timeslots:
-                prob += x[cls.sec_name, mt['days'], mt['start_time']] == 0, f"BlockedTimeSlotPenalty_{cls.sec_name}_{mt['days']}_{mt['start_time']}"
+    if enable_avoid_timeslot_penalty:
+        for cls in class_sections:
+            for tsl in timeslots:
+                if tsl in cls.unwanted_timeslots:
+                    prob += x[cls.sec_name, tsl] == 0, f"BlockedTimeSlotPenalty_{cls.sec_name}_{tsl}"
 
     # Penalty for moving a class outside its known timeslot when holdValue is 1
-    for cls in class_sections:
-        if cls.holdValue == 1:
-            for mt in meeting_times:
-                if mt['days'] + ' ' + mt['start_time'] not in cls.assigned_meeting_times:
-                    prob += x[cls.sec_name, mt['days'], mt['start_time']] == 0, f"MoveClassPenalty_{cls.sec_name}_{mt['days']}_{mt['start_time']}"
+    if enable_move_class_penalty:
+        for cls in class_sections:
+            if cls.holdValue == 1:
+                for tsl in timeslots:
+                    if tsl not in cls.assigned_meeting_times:
+                        prob += x[cls.sec_name, tsl] == 0, f"MoveClassPenalty_{cls.sec_name}_{tsl}"
 
-    # Separate 3-credit classes into MWF and TTh categories based on the number of congruent days
-    credit_3_sections_MWF = []
-    credit_3_sections_TTh = []
-
-    # Assuming class_sections is a list of class sections with credit values
-    credit_3_sections = [cls for cls in class_sections if int(cls.min_credit) >= 3]
-
-    for cls in credit_3_sections:
-        congruent_days = pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times)
-        if congruent_days == 3:
-            credit_3_sections_MWF.append(cls)
-        elif congruent_days == 2:
-            credit_3_sections_TTh.append(cls)
-
-    # Create constraints for MWF classes
-    for cls in credit_3_sections_MWF:
-        prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == 3, f"CongruentDaysConstraint_MWF_{cls.sec_name}"
-
-    # Create constraints for TTh classes
-    for cls in credit_3_sections_TTh:
-        prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for mt in meeting_times) == 2, f"CongruentDaysConstraint_TTh_{cls.sec_name}"
-
-    # Ensure that timeslots for 3-credit classes are consecutive on MWF
-    for cls in credit_3_sections_MWF:
-        # Collect the timeslots for the current class
-        timeslots = [(mt['days'], mt['start_time']) for mt in meeting_times if pulp.value(x[cls.sec_name, mt['days'], mt['start_time']]) == 1]
-
-        # Ensure that all timeslots have the same start time
-        start_time_set = set(start_time for _, start_time in timeslots)
-
-        if len(start_time_set) > 1:
-            # Add a constraint to ensure all timeslots have the same start time
-            prob += pulp.lpSum(x[cls.sec_name, day, start_time] for day, start_time in timeslots) == len(timeslots), f"ConsecutiveTimeSlots_MWF_{cls.sec_name}"
-
-    # Ensure that timeslots for 3-credit classes are consecutive on TTh
-    for cls in credit_3_sections_TTh:
-        # Collect the timeslots for the current class
-        timeslots = [(mt['days'], mt['start_time']) for mt in meeting_times if pulp.value(x[cls.sec_name, mt['days'], mt['start_time']]) == 1]
-
-        # Ensure that all timeslots have the same start time
-        start_time_set = set(start_time for _, start_time in timeslots)
-
-        if len(start_time_set) > 1:
-            # Add a constraint to ensure all timeslots have the same start time
-            prob += pulp.lpSum(x[cls.sec_name, day, start_time] for day, start_time in timeslots) == len(timeslots), f"ConsecutiveTimeSlots_TTh_{cls.sec_name}"
+    linked_sections = []
+    # Calculate the penalty for keeping linked sections together
+    if enable_linked_sections_penalty:
+        for cls_A, cls_B in linked_sections:
+            for tsl in timeslots:
+                prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] <= 1, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
 
     # Solve the problem
     prob.solve()
-    
-    # Check the status of the solver
-    if prob.status == pulp.LpStatusOptimal:
-        print("Optimal solution found.")
-        # Retrieve the values of decision variables (x)
-        for var in prob.variables():
-            if var.varValue == 1:
-                print(f"{var.name}: {var.varValue}")
-    else:
-        print("Solver did not find an optimal solution.")
+    #prob.solve(pulp.PULP_CBC_CMD())  # Example of specifying a different solv
+    for var in x:
+        if pulp.value(x[var]) == 1:
+            print(f"{var} is scheduled.")
 
-    # Create a list to store the scheduled class sections
-    # Initialize a list to store scheduled sections
+    # Output the results and create a list to store the scheduled class sections
     scheduled_sections = []
-
-    # Output the results and store scheduled sections
     for cls in class_sections:
-        for mt in meeting_times:
-            if pulp.value(x[cls.sec_name, mt['days'], mt['start_time']]) == 1:
+        for tsl in timeslots:
+            if pulp.value(x[cls.sec_name, tsl]) == 1:
                 scheduled_sections.append({
                     'section_name': cls.sec_name,
-                    'days': mt['days'],
-                    'start_time': mt['start_time'],
+                    'timeslot': tsl,
                 })
 
     # Create a dictionary to store optimization results
     optimization_results = {
         'message': 'Optimization complete',
         'scheduled_sections': scheduled_sections,
+        'status': 'Success' if prob.status == pulp.LpStatusOptimal else 'Failure'
     }
 
-    # Check if optimization was successful
-    if prob.status == pulp.LpStatusOptimal:
-        optimization_results['status'] = 'Success'
-    else:
-        optimization_results['status'] = 'Optimization failed'
+    # Return the optimization results
+    return optimization_results
 
-    # Return the optimization_results dictionary as JSON response
-    return optimization_results['scheduled_sections']
+
+
 
 
 
@@ -584,8 +574,8 @@ def optimize():
     meeting_times = create_meeting_times()
 
     # Optimize the schedule based on the received data
-    optimized_class_sections = optimize_schedule(adjusted_class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
-
+    optimized_results = optimize_schedule(adjusted_class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    optimized_class_sections = optimized_results.get('scheduled_sections', [])
 
     if optimized_class_sections is not None:
         # Prepare the optimization results as a dictionary
