@@ -434,6 +434,8 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
         for instructor in instructors:
             prob += pulp.lpSum(x[cls.sec_name, mt['days'], mt['start_time']] for cls in class_sections if cls.faculty1 == instructor) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{mt['days']}_{mt['start_time']}"
 
+    
+
     # Penalty for avoiding classes in the same timeslot
     for cls in class_sections:
         for mt in meeting_times:
@@ -538,8 +540,9 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     else:
         optimization_results['status'] = 'Optimization failed'
 
-    # Return the optimization_results dictionary
-    return jsonify(optimization_results)
+    # Return the optimization_results dictionary as JSON response
+    return optimization_results['scheduled_sections']
+
 
 
 

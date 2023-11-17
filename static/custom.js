@@ -31,10 +31,10 @@ function downloadCSV(csvContent, fileName) {
 // Function to create an HTML table from the result array
 function createResultsTable(data) {
     let table = '<table style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">';
-    table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Timeslot</th></tr>';
+    table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Day</th><th>Timeslot</th></tr>';
 
-    data.scheduled_sections.forEach(item => {
-        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td></tr>`;
+    data.forEach(item => {
+        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.days}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.start_time}</td></tr>`;
     });
 
     table += '</table>';
