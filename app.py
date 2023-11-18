@@ -434,7 +434,7 @@ def update_class_sections_with_schedule(class_sections, class_timeslots, meeting
         meeting_times (MeetingTimes): Object containing meeting time data.
     """
     for class_section in class_sections:
-        for day in ["MWF", "TTh"]:
+        for day in ["M W F", "T Th"]:
             for start_time in meeting_times.choose_time_blocks(class_section.days, class_section.credits):
                 variable = class_timeslots[class_section.section, day, start_time]
                 if variable.varValue == 1:
@@ -463,13 +463,13 @@ def read_csv_and_create_class_sections(csv_filename):
     return class_sections
 
 
-def optimize_remaining_classes(class_sections, remaining_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
+def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
     # Create a new list of timeslots based on the full meeting times
     full_meeting_times = create_full_meeting_times()
     full_timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in full_meeting_times]
 
     # Filter out the timeslots that are already used
-    available_timeslots = [ts for ts in full_timeslots if ts not in remaining_timeslots]
+    available_timeslots = [ts for ts in full_timeslots if ts not in used_timeslots]
 
     # Create a LP problem instance
     prob = pulp.LpProblem("Class_Scheduling_Remaining", pulp.LpMinimize)
@@ -720,7 +720,7 @@ def optimize():
     remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
 
     # Optimize the schedule for remaining classes
-    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
     # Combine results from both optimizations
     combined_results = {
