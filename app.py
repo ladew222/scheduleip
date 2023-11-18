@@ -456,22 +456,24 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
                 # Constraints for 'MWF' scheduling
                 for start_time in mwf_start_times:
                     mwf_vars = [x[cls.sec_name, f"{day} - {start_time}"] for day in ['M', 'W', 'F']]
+                    # All 'MWF' variables must be equal to ensure same start time
+                    prob += mwf_vars[0] == mwf_vars[1]
+                    prob += mwf_vars[1] == mwf_vars[2]
+                    # Ensure that all 'MWF' slots are selected or none
                     prob += pulp.lpSum(mwf_vars) == 3 * class_schedule_selector
 
                 # Constraints for 'TuTh' scheduling
                 for start_time in tu_th_start_times:
-                    tu_th_vars = [x[cls.sec_name, f"{day} - {start_time}"] for day in ['Tu', 'Th']]
-                    prob += pulp.lpSum(tu_th_vars) * 1.5 == 3 * (1 - class_schedule_selector)
-                    
-                # Additional constraints to ensure the total number of scheduled slots matches the credits
-                prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots if 'M' in tsl or 'W' in tsl or 'F' in tsl) == 3 * class_schedule_selector
-                prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots if 'Tu' in tsl or 'Th' in tsl) == 2 * (1 - class_schedule_selector)
+                    tu_var = x[cls.sec_name, f"Tu - {start_time}"]
+                    th_var = x[cls.sec_name, f"Th - {start_time}"]
+                    # Ensure that both 'Tu' and 'Th' slots are selected or none
+                    prob += tu_var == th_var
+                    prob += (tu_var + th_var) * 1.5 == 3 * (1 - class_schedule_selector)
 
             else:
                 # Constraints for classes with less than 3 credits
                 for day in cls.week_days.split():
                     prob += pulp.lpSum(x[cls.sec_name, f"{day} - {mt['start_time']}"] for mt in meeting_times if day in mt['days']) == 1, f"OneClassOneSlotConstraint_{cls.sec_name}_{day}"
-        
 
 
     # Constraint: An instructor can only teach one class per timeslot
