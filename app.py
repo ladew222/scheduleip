@@ -444,28 +444,25 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
 
     # Modified Constraint: Each class must take exactly one timeslot per credit hour
     # Additional Rule: Classes over 3 credits schedule Tu Th for 3 credits or M W F for 3 credits
-    # Modified Constraint for 3-Credit Classes
     if enable_unique_class_constraint:
+        start_times = set(mt['start_time'] for mt in meeting_times)
         for cls in class_sections:
             if int(cls.min_credit) >= 3:
-                # Separate constraints for M W F and Tu Th scheduling
-                mwf_timeslots = [tsl for tsl in timeslots if tsl.split(' - ')[0] in ['M', 'W', 'F']]
-                tu_th_timeslots = [tsl for tsl in timeslots if tsl.split(' - ')[0] in ['Tu', 'Th']]
+               for start_time in start_times:
+                # Binary variable to select scheduling on 'TuTh' or 'MWF'
+                schedule_selector = pulp.LpVariable(f"ScheduleSelector_{cls.sec_name}_{start_time}", 0, 1, cat='Binary')
 
-                # Ensure same time scheduling for M W F or Tu Th
-                for start_time in set(mt['start_time'] for mt in meeting_times):
-                    prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in mwf_timeslots if start_time in tsl) <= 1, f"Class_{cls.sec_name}_MWF_SameTime_{start_time}"
-                    prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in tu_th_timeslots if start_time in tsl) <= 1, f"Class_{cls.sec_name}_TuTh_SameTime_{start_time}"
+                # Variables for 'TuTh' and 'MWF' at each start time
+                tu_th_vars = [x[cls.sec_name, f"Tu - {start_time}"], x[cls.sec_name, f"Th - {start_time}"]]
+                mwf_vars = [x[cls.sec_name, f"M - {start_time}"], x[cls.sec_name, f"W - {start_time}"], x[cls.sec_name, f"F - {start_time}"]]
 
-                # Constraint for remaining credits if any
-                if int(cls.min_credit) > 3:
-                    extra_credits = int(cls.min_credit) - 3
-                    prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots) == 3 + extra_credits, f"TotalCreditsConstraint_{cls.sec_name}"
+                # Constraints to ensure the class is scheduled either on 'TuTh' or 'MWF'
+                prob += sum(tu_th_vars) * 1.5 <= 3 * schedule_selector, f"Class_{cls.sec_name}_TuTh_3Credits_{start_time}"
+                prob += sum(mwf_vars) <= 3 * (1 - schedule_selector), f"Class_{cls.sec_name}_MWF_3Credits_{start_time}"
             else:
-                # One credit per timeslot for other classes
+                # Other classes: one credit per time slot
                 for day in cls.week_days.split():
                     prob += pulp.lpSum(x[cls.sec_name, f"{day} - {mt['start_time']}"] for mt in meeting_times if day in mt['days']) == 1, f"OneClassOneSlotConstraint_{cls.sec_name}_{day}"
-
 
     # Constraint: An instructor can only teach one class per timeslot
     if enable_instructor_constraint:
