@@ -7,6 +7,7 @@ from io import StringIO
 from urllib.parse import urlencode
 import pandas as pd
 from io import StringIO
+from gurobipy import Model, GRB
 app = Flask(__name__)
 
 def create_meeting_times():
@@ -518,7 +519,9 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
                 prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] <= 1, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
 
     # Solve the problem
-    prob.solve()
+    #prob.solve()
+    #prob.solve(pulp.GUROBI())
+    prob.solve(pulp.CPLEX())
     
     for var in x:
         if pulp.value(x[var]) == 1:
