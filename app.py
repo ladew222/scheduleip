@@ -671,67 +671,69 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
 
 
 
-# Define the '/optimize' route to handle optimization requests
 @app.route('/optimize', methods=['POST'])
 def optimize():
     # Get the JSON data from the request
     data = request.get_json()
 
-    # Extract class section data from the 'data' variable
+    # Extract class section data and additional parameters
     class_sections_data = data.get('classData', [])
-    
-    
-    # Extract additional parameters
     class_penalty = data.get('classPenalty', 0)
     move_penalty = data.get('movePenalty', 0)
     blocked_slot_penalty = data.get('blockedSlotPenalty', 0)
     hold_penalty = data.get('holdPenalty', 0)
 
-    
     # Convert the class section data to ClassSection objects
     class_sections = create_class_sections_from_data(class_sections_data)
 
-    # Adjust the class_sections list to create an extra 1-credit class with "_ex" appended to the section name
-    adjusted_class_sections = []
+    # Split 4-credit classes and prepare for 3-credit optimization
+    three_credit_sections = []
+    remaining_class_sections = []
     for class_section in class_sections:
-        adjusted_class_sections.append(class_section)
-        if int(class_section.min_credit) > 3:
-            # Create an extra 1-credit class with "_ex" appended to the section name
-            extra_class_section = class_section.copy()
-            extra_class_section.sec_name += "_ex"
-            extra_class_section.min_credit = '1'  # Set credit to 1
-            adjusted_class_sections.append(extra_class_section)
-
+        if int(class_section.min_credit) == 4:
+            # Split into two sections: one with 3 credits, another with 1 credit
+            three_credit_section = class_section.copy()
+            three_credit_section.min_credit = '3'
+            one_credit_section = class_section.copy()
+            one_credit_section.min_credit = '1'
+            one_credit_section.sec_name += "_one_credit"
+            three_credit_sections.append(three_credit_section)
+            remaining_class_sections.append(one_credit_section)
+        elif int(class_section.min_credit) == 3:
+            three_credit_sections.append(class_section)
+        else:
+            remaining_class_sections.append(class_section)
 
     # Create a MeetingTimes object
     meeting_times = create_meeting_times()
 
-    # Optimize the schedule based on the received data
-    three_credit_results = optimize_schedule(adjusted_class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    # Optimize the schedule for 3-credit classes
+    three_credit_results = optimize_schedule(three_credit_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+
     # Extract used timeslots from the results
     used_timeslots = set()
     for section in three_credit_results['scheduled_sections']:
         used_timeslots.add(section['timeslot'])
-        
-    
+
     # Determine remaining available timeslots
+    all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
     remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
 
+    # Optimize the schedule for remaining classes
+    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
+    # Combine results from both optimizations
+    combined_results = {
+        'three_credit_results': three_credit_results,
+        'remaining_class_results': remaining_class_results
+    }
 
-    if optimized_class_sections is not None:
-        # Prepare the optimization results as a dictionary
-        optimization_results = {
-            'message': 'Optimization complete',
-            'results': [optimized_class_sections],
-        }
-
-        # Return the results as JSON
-        return jsonify(optimization_results)
+    # Check if optimization was successful
+    if combined_results:
+        return jsonify(combined_results)
     else:
-        # If no optimal solution is found, return an error response
         error_response = {
-            'error': 'No optimal solution found'
+            'error': 'Optimization failed or no classes provided'
         }
         return jsonify(error_response), 400
 
