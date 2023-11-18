@@ -87,6 +87,191 @@ def create_meeting_times():
         return your_meeting_time_data
     
 
+def create_full_meeting_times():
+    your_meeting_time_data = [
+        {
+            'days': 'M',
+            'start_time': '8:00AM',
+            'end_time': '8:55AM',
+        },
+        {
+            'days': 'M',
+            'start_time': '9:05AM',
+            'end_time': '10:00AM',
+        },
+        {
+            'days': 'M',
+            'start_time': '10:10AM',
+            'end_time': '11:05AM',
+        },
+        {
+            'days': 'M',
+            'start_time': '11:15AM',
+            'end_time': '12:10PM',
+        },
+        {
+            'days': 'M',
+            'start_time': '12:20PM',
+            'end_time': '1:15PM',
+        },
+        {
+            'days': 'M',
+            'start_time': '1:25PM',
+            'end_time': '2:20PM',
+        },
+        {
+            'days': 'M',
+            'start_time': '2:30PM',
+            'end_time': '3:25PM',
+        },
+        {
+            'days': 'M',
+            'start_time': '3:35PM',
+            'end_time': '4:30PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '8:00AM',
+            'end_time': '8:55AM',
+        },
+        {
+            'days': 'W',
+            'start_time': '9:05AM',
+            'end_time': '10:00AM',
+        },
+        {
+            'days': 'W',
+            'start_time': '10:10AM',
+            'end_time': '11:05AM',
+        },
+        {
+            'days': 'W',
+            'start_time': '11:15AM',
+            'end_time': '12:10PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '12:20PM',
+            'end_time': '1:15PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '1:25PM',
+            'end_time': '2:20PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '2:30PM',
+            'end_time': '3:25PM',
+        },
+        {
+            'days': 'W',
+            'start_time': '3:35PM',
+            'end_time': '4:30PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '8:00AM',
+            'end_time': '8:55AM',
+        },
+        {
+            'days': 'F',
+            'start_time': '9:05AM',
+            'end_time': '10:00AM',
+        },
+        {
+            'days': 'F',
+            'start_time': '10:10AM',
+            'end_time': '11:05AM',
+        },
+        {
+            'days': 'F',
+            'start_time': '11:15AM',
+            'end_time': '12:10PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '12:20PM',
+            'end_time': '1:15PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '1:25PM',
+            'end_time': '2:20PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '2:30PM',
+            'end_time': '3:25PM',
+        },
+        {
+            'days': 'F',
+            'start_time': '3:35PM',
+            'end_time': '4:30PM',
+        },
+        {
+            'days': 'Tu',
+            'start_time': '8:00AM',
+            'end_time': '9:20AM',
+        },
+        {
+            'days': 'Tu',
+            'start_time': '9:30AM',
+            'end_time': '10:50AM',
+        },
+        {
+            'days': 'Tu',
+            'start_time': '11:00AM',
+            'end_time': '12:20PM',
+        },
+        {
+            'days': 'Tu',
+            'start_time': '12:30PM',
+            'end_time': '1:50PM',
+        },
+        {
+            'days': 'Tu',
+            'start_time': '2:00PM',
+            'end_time': '3:20PM',
+        },
+        {
+            'days': 'Tu',
+            'start_time': '3:30PM',
+            'end_time': '4:50PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '8:00AM',
+            'end_time': '9:20AM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '9:30AM',
+            'end_time': '10:50AM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '11:00AM',
+            'end_time': '12:20PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '12:30PM',
+            'end_time': '1:50PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '2:00PM',
+            'end_time': '3:20PM',
+        },
+        {
+            'days': 'Th',
+            'start_time': '3:30PM',
+            'end_time': '4:50PM',
+        },
+    ]
+
+    return your_meeting_time_data
 
 
 
@@ -278,13 +463,80 @@ def read_csv_and_create_class_sections(csv_filename):
     return class_sections
 
 
+def optimize_remaining_classes(class_sections, remaining_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
+    # Create a new list of timeslots based on the full meeting times
+    full_meeting_times = create_full_meeting_times()
+    full_timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in full_meeting_times]
+
+    # Filter out the timeslots that are already used
+    available_timeslots = [ts for ts in full_timeslots if ts not in remaining_timeslots]
+
+    # Create a LP problem instance
+    prob = pulp.LpProblem("Class_Scheduling_Remaining", pulp.LpMinimize)
+
+    # Create binary variables: x_ij = 1 if class i is in timeslot j
+    x = pulp.LpVariable.dicts("x", 
+                              ((cls.sec_name, tsl) for cls in class_sections for tsl in available_timeslots),
+                              cat='Binary')
+
+    # Objective function: Minimize the total number of scheduled classes
+    prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections for tsl in available_timeslots)
+
+    # Constraint: Each class must be scheduled once
+    for cls in class_sections:
+        prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in available_timeslots) == 1, f"OneClassOneSlot_{cls.sec_name}"
+
+    # Constraint: An instructor can only teach one class per timeslot
+    instructors = set(cls.faculty1 for cls in class_sections)
+    for instructor in instructors:
+        for tsl in available_timeslots:
+            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.faculty1 == instructor) <= 1, f"OneInstructorOneSlot_{instructor}_{tsl}"
+
+    # Constraint: Avoid class overlaps
+    for tsl in available_timeslots:
+        prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections) <= 1, f"AvoidOverlap_{tsl}"
+
+    # Constraint: Penalize classes that intersect and have one of each other in avoid_classes
+    for cls in class_sections:
+        for other_cls in class_sections:
+            if other_cls.sec_name in cls.avoid_classes:
+                for tsl in available_timeslots:
+                    prob += x[cls.sec_name, tsl] + x[other_cls.sec_name, tsl] <= 1, f"AvoidClasses_{cls.sec_name}_{other_cls.sec_name}_{tsl}"
+
+    # Constraint: Avoid unwanted timeslots
+    for cls in class_sections:
+        for tsl in cls.unwanted_timeslots:
+            if tsl in available_timeslots:
+                prob += x[cls.sec_name, tsl] == 0, f"AvoidUnwanted_{cls.sec_name}_{tsl}"
+
+    # Solve the problem
+    prob.solve()
+
+    # Create a list to store the scheduled class sections
+    scheduled_sections = []
+
+    # Check the values of the decision variables and create the schedule
+    for cls in class_sections:
+        for tsl in remaining_timeslots:
+            if pulp.value(x[cls.sec_name, tsl]) == 1:
+                scheduled_sections.append({
+                    'section_name': cls.sec_name,
+                    'timeslot': tsl,
+                })
+
+    # Create a dictionary to store optimization results
+    optimization_results = {
+        'message': 'Optimization for remaining classes complete',
+        'scheduled_sections': scheduled_sections,
+        'status': 'Success' if prob.status == pulp.LpStatusOptimal else 'Failure'
+    }
+
+    return optimization_results
 
 
 def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
     
-    
-    
-    
+        
     
     linked_sections = []
 
@@ -455,7 +707,16 @@ def optimize():
     meeting_times = create_meeting_times()
 
     # Optimize the schedule based on the received data
-    optimized_class_sections = optimize_schedule(adjusted_class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    three_credit_results = optimize_schedule(adjusted_class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    # Extract used timeslots from the results
+    used_timeslots = set()
+    for section in three_credit_results['scheduled_sections']:
+        used_timeslots.add(section['timeslot'])
+        
+    
+    # Determine remaining available timeslots
+    remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
+
 
 
     if optimized_class_sections is not None:
