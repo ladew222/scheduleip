@@ -449,8 +449,8 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
         for cls in class_sections:
             if int(cls.min_credit) >= 3:
                 # Separate constraints for M W F and Tu Th scheduling
-                mwf_timeslots = [tsl for tsl in timeslots if any(day in tsl for day in ['M', 'W', 'F'])]
-                tu_th_timeslots = [tsl for tsl in timeslots if any(day in tsl for day in ['Tu', 'Th'])]
+                mwf_timeslots = [tsl for tsl in timeslots if tsl.split(' - ')[0] in ['M', 'W', 'F']]
+                tu_th_timeslots = [tsl for tsl in timeslots if tsl.split(' - ')[0] in ['Tu', 'Th']]
 
                 # Ensure same time scheduling for M W F or Tu Th
                 for start_time in set(mt['start_time'] for mt in meeting_times):
