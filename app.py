@@ -445,20 +445,23 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     # Modified Constraint: Each class must take exactly one timeslot per credit hour
     # Additional Rule: Classes over 3 credits schedule Tu Th for 3 credits or M W F for 3 credits
     if enable_unique_class_constraint:
-        start_times = set(mt['start_time'] for mt in meeting_times)
+        mwf_start_times = set(mt['start_time'] for mt in meeting_times if any(day in mt['days'] for day in ['M', 'W', 'F']))
+        tu_th_start_times = set(mt['start_time'] for mt in meeting_times if any(day in mt['days'] for day in ['Tu', 'Th']))
         for cls in class_sections:
-            if int(cls.min_credit) >= 3:
-               for start_time in start_times:
-                # Binary variable to select scheduling on 'TuTh' or 'MWF'
-                schedule_selector = pulp.LpVariable(f"ScheduleSelector_{cls.sec_name}_{start_time}", 0, 1, cat='Binary')
+            if int(cls.min_credit) == 3:
+                # Binary selector for each class to choose between 'MWF' and 'TuTh'
+                class_schedule_selector = pulp.LpVariable(f"ClassScheduleSelector_{cls.sec_name}", 0, 1, cat='Binary')
 
-                # Variables for 'TuTh' and 'MWF' at each start time
-                tu_th_vars = [x[cls.sec_name, f"Tu - {start_time}"], x[cls.sec_name, f"Th - {start_time}"]]
-                mwf_vars = [x[cls.sec_name, f"M - {start_time}"], x[cls.sec_name, f"W - {start_time}"], x[cls.sec_name, f"F - {start_time}"]]
+                # Handle 'MWF' scheduling
+                for start_time in mwf_start_times:
+                    mwf_vars = [x[cls.sec_name, f"{day} - {start_time}"] for day in ['M', 'W', 'F']]
+                    prob += sum(mwf_vars) <= 3 * class_schedule_selector, f"Class_{cls.sec_name}_MWF_3Credits_{start_time}"
 
-                # Constraints to ensure the class is scheduled either on 'TuTh' or 'MWF'
-                prob += sum(tu_th_vars) * 1.5 <= 3 * schedule_selector, f"Class_{cls.sec_name}_TuTh_3Credits_{start_time}"
-                prob += sum(mwf_vars) <= 3 * (1 - schedule_selector), f"Class_{cls.sec_name}_MWF_3Credits_{start_time}"
+                # Handle 'TuTh' scheduling
+                for start_time in tu_th_start_times:
+                    tu_th_vars = [x[cls.sec_name, f"Tu - {start_time}"], x[cls.sec_name, f"Th - {start_time}"]]
+                    prob += sum(tu_th_vars) * 1.5 <= 3 * (1 - class_schedule_selector), f"Class_{cls.sec_name}_TuTh_3Credits_{start_time}"
+
             else:
                 # Other classes: one credit per time slot
                 for day in cls.week_days.split():
@@ -564,14 +567,7 @@ def optimize():
     adjusted_class_sections = []
     for class_section in class_sections:
         adjusted_class_sections.append(class_section)
-        if int(class_section.min_credit) > 3:
-            # Create an extra 1-credit class with "_ex" appended to the section name
-            extra_class_section = class_section.copy()
-            extra_class_section.sec_name += "_ex"
-            extra_class_section.min_credit = '1'  # Set credit to 1
-            adjusted_class_sections.append(extra_class_section)
-
-
+       
     # Create a MeetingTimes object
     meeting_times = create_meeting_times()
 
