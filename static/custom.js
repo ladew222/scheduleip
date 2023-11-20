@@ -71,7 +71,12 @@ $(document).ready(function () {
     var calendarEl = document.getElementById('full-calendar');
     var calendar = new FullCalendar.Calendar(calendarEl, {
         // Configuration options go here
-        initialView: 'timeGridWeek'
+        initialView: 'timeGridWeek',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'timeGridDay,timeGridWeek' // Buttons for day and week views
+        },
     });
     calendar.render();
 
