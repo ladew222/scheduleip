@@ -302,13 +302,10 @@ $(document).ready(function () {
                 $("#class-table").fadeOut(1000); // Fade out slowly over 1 second
                 // Display the results in the 'results-list' div
                 $('#results-list').empty(); // Clear any previous results
-                if (response.message === 'Optimization complete') {
-                    $.each(response.results, function (index, result) {
-                        // Append each result to the 'results-list' div
-                        $('#results-list').append('<p>' + createResultsTable(result) + '</p>');
-                    });
+                if (response.message === 'Success') {
+                    $('#results-list').append('<p>' + createResultsTable(response.scheduled_sections) + '</p>');
                 } else {
-                    $('#results-list').html('<p>Error: ' + response.error + '</p>');
+                    $('#results-list').html('<p>Error: ' + response.message + '</p>');
                 }
             },
             error: function (error) {

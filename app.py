@@ -468,6 +468,13 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
     full_meeting_times = create_full_meeting_times()
     full_timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in full_meeting_times]
 
+    # Transform the used_timeslots to match the daily pattern
+    transformed_used_timeslots = set()
+    for used_tslot in used_timeslots:
+        days, time = used_tslot.split(' - ')
+        for day in days.split():
+            transformed_used_timeslots.add(f"{day} - {time}")
+            
     # Filter out the timeslots that are already used
     available_timeslots = [ts for ts in full_timeslots if ts not in used_timeslots]
 
@@ -505,9 +512,18 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
 
     # Constraint: Avoid unwanted timeslots
     for cls in class_sections:
-        for tsl in cls.unwanted_timeslots:
+        # Transform unwanted timeslots for this class
+        transformed_unwanted_timeslots = set()
+        for tslot in cls.unwanted_timeslots:
+            days, time = tslot.split(' - ')
+            for day in days.split():
+                transformed_unwanted_timeslots.add(f"{day} - {time}")
+
+        # Apply constraint for each unwanted timeslot
+        for tsl in transformed_unwanted_timeslots:
             if tsl in available_timeslots:
                 prob += x[cls.sec_name, tsl] == 0, f"AvoidUnwanted_{cls.sec_name}_{tsl}"
+
 
     # Solve the problem
     prob.solve()
@@ -723,9 +739,15 @@ def optimize():
     remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
     # Combine results from both optimizations
+    combined_scheduled_sections = three_credit_results['scheduled_sections'] + remaining_class_results['scheduled_sections']
+
+    # Sort the combined list by section name
+    combined_scheduled_sections.sort(key=lambda x: x['section_name'])
+
+    # Prepare the combined results dictionary
     combined_results = {
-        'three_credit_results': three_credit_results,
-        'remaining_class_results': remaining_class_results
+        'scheduled_sections': combined_scheduled_sections,
+        'message': 'Success' if (three_credit_results['status'] == 'Success' and remaining_class_results['status'] == 'Success') else 'Partial Success'
     }
 
     # Check if optimization was successful
