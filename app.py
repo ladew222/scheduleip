@@ -7,6 +7,8 @@ from io import StringIO
 from urllib.parse import urlencode
 import pandas as pd
 from io import StringIO
+from datetime import datetime, timedelta
+import calendar
 app = Flask(__name__)
 
 
@@ -684,6 +686,60 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     return optimization_results
 
 
+def get_weekday_date(weekday):
+    """
+    Get the date of the next occurrence of the given weekday.
+    """
+    today = datetime.today()
+    today_weekday = today.weekday()  # Monday is 0 and Sunday is 6
+    days_ahead = (weekday - today_weekday) % 7
+    return today + timedelta(days=days_ahead)
+
+def process_calendar_data(three_credit_results, remaining_class_results):
+    calendar_data = []
+
+    # Process three-credit classes
+    for result in three_credit_results['scheduled_sections']:
+        section_name = result['section_name']
+        timeslot = result['timeslot']
+        days, start_time = timeslot.split(' - ')
+        start_time_obj = datetime.strptime(start_time, '%I:%M%p')
+
+        for day in days.split():
+            weekday_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
+            class_date = get_weekday_date(weekday_map[day])
+            start_datetime = datetime.combine(class_date, start_time_obj.time())
+            duration = timedelta(hours=1)  # Three-credit classes last for 1 hour
+            end_datetime = start_datetime + duration
+
+            calendar_event = {
+                'section_name': section_name,
+                'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+                'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+            }
+            calendar_data.append(calendar_event)
+
+    # Process remaining one-credit classes
+    for result in remaining_class_results['scheduled_sections']:
+        section_name = result['section_name']
+        timeslot = result['timeslot']
+        day, start_time = timeslot.split(' - ')
+        start_time_obj = datetime.strptime(start_time, '%I:%M%p')
+        
+        weekday_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
+        class_date = get_weekday_date(weekday_map[day])
+        start_datetime = datetime.combine(class_date, start_time_obj.time())
+        duration = timedelta(hours=1, minutes=30)  # One-credit classes last for 1.5 hours
+        end_datetime = start_datetime + duration
+
+        calendar_event = {
+            'section_name': section_name,
+            'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+            'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+        }
+        calendar_data.append(calendar_event)
+
+    return calendar_data
 
 
 
@@ -738,6 +794,8 @@ def optimize():
     # Optimize the schedule for remaining classes
     remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
+    calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
+    
     # Combine results from both optimizations
     combined_scheduled_sections = three_credit_results['scheduled_sections'] + remaining_class_results['scheduled_sections']
 
@@ -747,9 +805,11 @@ def optimize():
     # Prepare the combined results dictionary
     combined_results = {
         'scheduled_sections': combined_scheduled_sections,
+        'calendar_events': calendar_events,
         'message': 'Success' if (three_credit_results['status'] == 'Success' and remaining_class_results['status'] == 'Success') else 'Partial Success'
     }
 
+    
     # Check if optimization was successful
     if combined_results:
         return jsonify(combined_results)

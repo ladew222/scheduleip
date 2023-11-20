@@ -31,7 +31,17 @@
     <!-- Include Select2 CSS and JavaScript -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+
     
+    <!-- FullCalendar CSS -->
+    <link href='https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.9.0/fullcalendar.css' rel='stylesheet' />
+
+    <!-- FullCalendar JavaScript -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js'></script>
+
+
+
     <!-- Include your updated custom JavaScript file -->
     <script src="{{ url_for('static', filename='custom.js') }}"></script>
 </head>
@@ -186,6 +196,10 @@
         </ul>
         <div class="container mt-3 text-center">
             <button id="export-csv" class="btn btn-success">Export to CSV</button>
+        </div>
+        <div id="simple-calendar-container" class="mt-5">
+            <h3>Class Schedule</h3>
+            <div id="full-calendar"></div>
         </div>
         <a id="show-table" href="#">Show Input Table</a>
     </div>

@@ -2,6 +2,13 @@
  function arrayToString(arr, delimiter) {
     return arr.join(delimiter);
 }
+// Function to update the calendar with events
+function updateCalendar(events) {
+    // Assuming you have a function to add events to your Simple Calendar
+    // This is a pseudocode example, actual implementation may vary
+    simpleCalendar.clearEvents(); // Clear existing events
+    events.forEach(event => simpleCalendar.addEvent(event));
+}
 
 
 // Function to convert an array of objects to a CSV string
@@ -61,7 +68,12 @@ $(document).ready(function () {
         $(".hold-checkbox").prop("checked", true);
     });
 
-
+    var calendarEl = document.getElementById('full-calendar');
+    var calendar = new FullCalendar.Calendar(calendarEl, {
+        // Configuration options go here
+        initialView: 'timeGridWeek'
+    });
+    calendar.render();
 
     // Function to gather data from the table and initiate the CSV download
     $('#save-schedule').on('click', function() {
@@ -307,6 +319,26 @@ $(document).ready(function () {
                 } else {
                     $('#results-list').html('<p>Error: ' + response.message + '</p>');
                 }
+                 // Check if calendar events are available in the response
+                if (response.calendar_events) {
+                    // Clear any existing events in the calendar
+                    calendar.removeAllEvents();
+
+                    // Add new events to the calendar
+                    response.calendar_events.forEach(event => {
+                        calendar.addEvent({
+                            title: event.section_name, // Assuming 'section_name' is used as the event title
+                            start: event.start,
+                            end: event.end
+                        });
+                    });
+
+                    // Render or rerender the calendar
+                    calendar.render();
+                } else {
+                    console.error('No calendar events in response');
+                }
+
             },
             error: function (error) {
                 console.error('Error:', error);
