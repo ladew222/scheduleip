@@ -72,6 +72,7 @@ $(document).ready(function () {
     var calendar = new FullCalendar.Calendar(calendarEl, {
         // Configuration options go here
         initialView: 'timeGridWeek',
+        eventColor: '#378006',
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
@@ -334,7 +335,8 @@ $(document).ready(function () {
                         calendar.addEvent({
                             title: event.section_name, // Assuming 'section_name' is used as the event title
                             start: event.start,
-                            end: event.end
+                            end: event.end,
+                            color: event.color 
                         });
                     });
 

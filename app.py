@@ -10,6 +10,12 @@ from io import StringIO
 from datetime import datetime, timedelta
 import calendar
 app = Flask(__name__)
+import hashlib
+
+def string_to_color(s):
+    # Use a hash function to convert the string to a hexadecimal color code
+    hash_object = hashlib.md5(s.encode())
+    return '#' + hash_object.hexdigest()[:6]
 
 
 def create_meeting_times():
@@ -608,7 +614,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
             
    # Penalty for avoiding classes in the same timeslot
     penalty = class_penalty  # Adjust the penalty weight as needed
-    constraint_counter = 0  # Initialize a counter for constraint names
+    constraint_counter = 0  # Initialize a countexr for constraint names
     for cls in class_sections:
         for tsl in timeslots:
             for other_cls_name in cls.avoid_classes:
@@ -697,6 +703,7 @@ def get_weekday_date(weekday):
 
 def process_calendar_data(three_credit_results, remaining_class_results):
     calendar_data = []
+    color_cache ={ }
 
     # Process three-credit classes
     for result in three_credit_results['scheduled_sections']:
@@ -711,11 +718,19 @@ def process_calendar_data(three_credit_results, remaining_class_results):
             start_datetime = datetime.combine(class_date, start_time_obj.time())
             duration = timedelta(hours=1)  # Three-credit classes last for 1 hour
             end_datetime = start_datetime + duration
+            # Extract the course prefix
+            course_prefix = section_name.split('-')[0]
+            # Assign color based on the course prefix
+            if course_prefix not in color_cache:
+                color_cache[course_prefix] = str(string_to_color(course_prefix))
+            color = color_cache[course_prefix]
+
 
             calendar_event = {
                 'section_name': section_name,
                 'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
-                'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+                'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+                'color': color
             }
             calendar_data.append(calendar_event)
 
@@ -731,11 +746,16 @@ def process_calendar_data(three_credit_results, remaining_class_results):
         start_datetime = datetime.combine(class_date, start_time_obj.time())
         duration = timedelta(hours=1, minutes=30)  # One-credit classes last for 1.5 hours
         end_datetime = start_datetime + duration
+        if course_prefix not in color_cache:
+            color_cache[course_prefix] = str(string_to_color(course_prefix))
+        color = color_cache[course_prefix]
+
 
         calendar_event = {
             'section_name': section_name,
             'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
-            'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S')
+            'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+            'color': color
         }
         calendar_data.append(calendar_event)
 
