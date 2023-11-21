@@ -501,6 +501,15 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
     for cls in class_sections:
         prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in available_timeslots) == 1, f"OneClassOneSlot_{cls.sec_name}"
 
+    # Create a set of unique rooms
+    rooms = set(cls.room for cls in class_sections if cls.room.strip())
+
+    # Constraint: No two classes can be in the same room at the same timeslot
+    for tsl in available_timeslots:
+        for room in rooms:
+            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.room == room) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
+
+
     # Constraint: An instructor can only teach one class per timeslot
     instructors = set(cls.faculty1 for cls in class_sections)
     for instructor in instructors:
