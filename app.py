@@ -555,6 +555,8 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
                 scheduled_sections.append({
                     'section_name': cls.sec_name,
                     'timeslot': tsl,
+                    'instructor': cls.faculty1,
+                    'room': cls.room
                 })
 
     # Create a dictionary to store optimization results
@@ -655,7 +657,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
                     prob += x[cls.sec_name, tsl] == 0, constraint_name
 
 
-     # Additional penalty for blocked_time_slots
+    # Additional penalty for blocked_time_slots
     blocked_slot_penalty = blocked_slot_penalty  # Adjust the penalty weight as needed
     for cls in class_sections:
         for tsl in timeslots:
@@ -691,6 +693,8 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
                 scheduled_sections.append({
                     'section_name': cls.sec_name,
                     'timeslot': tsl,
+                    'instructor': cls.faculty1,
+                    'room': cls.room,
                 })
 
     # Create a dictionary to store optimization results
@@ -747,6 +751,7 @@ def process_calendar_data(three_credit_results, remaining_class_results):
                 'section_name': section_name,
                 'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
                 'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+                'instructor': result['instructor'],
                 'color': color
             }
             calendar_data.append(calendar_event)
@@ -772,6 +777,7 @@ def process_calendar_data(three_credit_results, remaining_class_results):
             'section_name': section_name,
             'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
             'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+            'instructor': result['instructor'],
             'color': color
         }
         calendar_data.append(calendar_event)
