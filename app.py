@@ -603,6 +603,14 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
         prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots if (cls.sec_name, tsl) in x) == 1, unique_constraint_name
 
 
+    # Create a set of unique rooms
+    rooms = set(cls.room for cls in class_sections if cls.room.strip())
+
+    # Constraint: No two classes can be in the same room at the same timeslot
+    for tsl in timeslots:
+        for room in rooms:
+            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.room == room and (cls.sec_name, tsl) in x) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
+
     # Assuming 'instructors' is a list of all unique instructors
     instructors = set(cls.faculty1 for cls in class_sections)
 
