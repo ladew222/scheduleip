@@ -470,6 +470,28 @@ def read_csv_and_create_class_sections(csv_filename):
 
     return class_sections
 
+# Function to get all datetime slots for a class based on its week days and start time
+def get_class_datetime_slots(week_days, start_time_str):
+    start_time = datetime.strptime(start_time_str, '%I:%M%p').time()
+    weekdays_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
+    datetime_slots = []
+    for day in week_days.split():
+        weekday = weekdays_map[day]
+        class_datetime = datetime.combine(datetime.today(), start_time)
+        days_ahead = (weekday - class_datetime.weekday()) % 7
+        class_datetime += timedelta(days=days_ahead)
+        datetime_slots.append(class_datetime)
+    return datetime_slots
+
+# Find the closest time slot for the 1-credit class
+def find_closest_slot(cls_1_slots, cls_3_slots):
+    min_diff = float('inf')
+    for cls_1_slot in cls_1_slots:
+        for cls_3_slot in cls_3_slots:
+            diff = abs((cls_1_slot - cls_3_slot).total_seconds() / 3600)  # Difference in hours
+            min_diff = min(min_diff, diff)
+    return min_diff
+
 
 def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
     # Create a new list of timeslots based on the full meeting times
@@ -540,6 +562,22 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
         for tsl in transformed_unwanted_timeslots:
             if tsl in available_timeslots:
                 prob += x[cls.sec_name, tsl] == 0, f"AvoidUnwanted_{cls.sec_name}_{tsl}"
+
+    # Mapping for 3-credit classes and their time slots
+    three_credit_slots = {}
+    for cls in class_sections:
+        if cls.min_credit == '3':
+            three_credit_slots[cls.sec_name] = get_class_datetime_slots(cls.week_days, cls.csm_start)
+
+    # Penalty for 1-credit classes not being close to their 3-credit counterparts
+    for cls in class_sections:
+        if cls.min_credit == '1' and cls.sec_name.endswith("_one_credit"):
+            base_sec_name = cls.sec_name[:-11]  # Remove "_one_credit"
+            if base_sec_name in three_credit_slots:
+                cls_1_slots = get_class_datetime_slots(cls.week_days, cls.csm_start)
+                time_diff = find_closest_slot(cls_1_slots, three_credit_slots[base_sec_name])
+                for tsl in available_timeslots:
+                    prob += hold_penalty * time_diff * x[cls.sec_name, tsl]
 
 
     # Solve the problem
