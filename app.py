@@ -752,6 +752,7 @@ def process_calendar_data(three_credit_results, remaining_class_results):
                 'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
                 'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
                 'instructor': result['instructor'],
+                'room': result['room'],
                 'color': color
             }
             calendar_data.append(calendar_event)
@@ -778,6 +779,7 @@ def process_calendar_data(three_credit_results, remaining_class_results):
             'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
             'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
             'instructor': result['instructor'],
+            'room': result['room'],
             'color': color
         }
         calendar_data.append(calendar_event)

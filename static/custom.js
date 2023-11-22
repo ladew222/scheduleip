@@ -38,7 +38,7 @@ function downloadCSV(csvContent, fileName) {
 // Function to create an HTML table from the result array
 function createResultsTable(data) {
     let table = '<table style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">';
-    table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th<th>Instructor</th><th>Timeslot</th></tr>';
+    table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Instructor</th><th>Timeslot</th></tr>';
 
     data.forEach(item => {
         table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.instructor}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td></tr>`;
@@ -72,7 +72,9 @@ $(document).ready(function () {
     var calendar = new FullCalendar.Calendar(calendarEl, {
         // Configuration options go here
         initialView: 'timeGridWeek',
+        displayEventTime: false,
         eventColor: '#378006',
+        
         headerToolbar: {
             left: 'prev,next today',
             center: 'title',
@@ -333,7 +335,7 @@ $(document).ready(function () {
                     // Add new events to the calendar
                     response.calendar_events.forEach(event => {
                         calendar.addEvent({
-                            title: event.section_name, // Assuming 'section_name' is used as the event title
+                            title: event.section_name +" "+ event.instructor + " (" +  event.room +")", // Assuming 'section_name' is used as the event title
                             start: event.start,
                             location: event.room,
                             description: event.instructor,
