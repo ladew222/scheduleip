@@ -82,7 +82,7 @@ $(document).ready(function () {
         },
         // Add the eventDidMount callback for tooltips
         eventDidMount: function(info) {
-            var tooltipContent = `Instructor: ${info.event.extendedProps.instructor} Room: ${info.event.extendedProps.room}`;
+            var tooltipContent = `Instructor: ${info.event.extendedProps.instructor} Room: ${info.event.extendedProps.buidling}: ${info.event.extendedProps.room} Capacity: ${info.event.extendedProps.capacity}`;
             $().tooltip(info.el, {
                 title: tooltipContent,
                 placement: 'top',
@@ -354,7 +354,9 @@ $(document).ready(function () {
                             extendedProps: {
                                 department: 'BioChemistry',
                                 instructor: event.instructor,
-                                room: event.room
+                                room: event.room,
+                                capacity: event.capacity,
+                                buidling: event.bldg,
                               },
                         });
                     });

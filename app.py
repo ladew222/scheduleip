@@ -604,7 +604,9 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
                     'section_name': cls.sec_name,
                     'timeslot': tsl,
                     'instructor': cls.faculty1,
-                    'room': cls.room
+                    'room': cls.room,
+                    'bldg': cls.bldg,
+                    'sec_cap' : cls.sec_cap,
                 })
 
     # Create a dictionary to store optimization results
@@ -744,6 +746,9 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
                     'timeslot': tsl,
                     'instructor': cls.faculty1,
                     'room': cls.room,
+                    'sec_cap' : cls.sec_cap,
+                    'bldg': cls.bldg,
+                    
                 })
 
     # Create a dictionary to store optimization results
@@ -809,6 +814,8 @@ def process_calendar_data(three_credit_results, remaining_class_results):
                     'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
                     'instructor': result['instructor'],
                     'room': result['room'],
+                    'capacity' : result['sec_cap'],
+                    'bldg': result['bldg'],
                     'color': color
                 }
                 calendar_data.append(calendar_event)
