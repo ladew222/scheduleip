@@ -80,6 +80,16 @@ $(document).ready(function () {
             center: 'title',
             right: 'timeGridDay,timeGridWeek' // Buttons for day and week views
         },
+        // Add the eventDidMount callback for tooltips
+        eventDidMount: function(info) {
+            var tooltipContent = `Instructor: ${info.event.extendedProps.instructor} Room: ${info.event.extendedProps.room}`;
+            $().tooltip(info.el, {
+                title: tooltipContent,
+                placement: 'top',
+                trigger: 'hover',
+                container: 'body'
+            });
+        }
     });
     calendar.render();
 
@@ -342,7 +352,9 @@ $(document).ready(function () {
                             end: event.end,
                             color: event.color, 
                             extendedProps: {
-                                department: 'BioChemistry'
+                                department: 'BioChemistry',
+                                instructor: event.instructor,
+                                room: event.room
                               },
                         });
                     });
