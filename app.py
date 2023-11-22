@@ -531,6 +531,23 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
         for room in rooms:
             prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.room == room) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
 
+    # Transform weekly unwanted timeslots to individual daily timeslots
+    def transform_unwanted_timeslots(unwanted_timeslots):
+        transformed_timeslots = set()
+        for timeslot in unwanted_timeslots:
+            days, time = timeslot.split(' - ')
+            for day in days.split():
+                transformed_timeslots.add(f"{day} - {time}")
+        return transformed_timeslots
+
+    # Constraint: Penalize classes assigned to blocked timeslots
+    for cls in class_sections:
+        transformed_unwanted_timeslots = transform_unwanted_timeslots(cls.unwanted_timeslots)
+        for tsl in available_timeslots:
+            if tsl in transformed_unwanted_timeslots:
+                # Apply a penalty for scheduling a class in a blocked timeslot
+                constraint_name = f"BlockedTimeslotPenalty_{cls.sec_name}_{tsl}"
+                prob += blocked_slot_penalty * x[cls.sec_name, tsl], constraint_name
 
     # Constraint: An instructor can only teach one class per timeslot
     instructors = set(cls.faculty1 for cls in class_sections)
@@ -541,13 +558,6 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
     # Constraint: Avoid class overlaps
     for tsl in available_timeslots:
         prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections) <= 1, f"AvoidOverlap_{tsl}"
-
-    # Constraint: Penalize classes that intersect and have one of each other in avoid_classes
-    for cls in class_sections:
-        for other_cls in class_sections:
-            if other_cls.sec_name in cls.avoid_classes:
-                for tsl in available_timeslots:
-                    prob += x[cls.sec_name, tsl] + x[other_cls.sec_name, tsl] <= 1, f"AvoidClasses_{cls.sec_name}_{other_cls.sec_name}_{tsl}"
 
     # Constraint: Avoid unwanted timeslots
     for cls in class_sections:
@@ -577,7 +587,7 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
                 cls_1_slots = get_class_datetime_slots(cls.week_days, cls.csm_start)
                 time_diff = find_closest_slot(cls_1_slots, three_credit_slots[base_sec_name])
                 for tsl in available_timeslots:
-                    prob += hold_penalty * time_diff * x[cls.sec_name, tsl]
+                    prob += move_penalty * time_diff * x[cls.sec_name, tsl]
 
 
     # Solve the problem
@@ -680,6 +690,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
                     constraint_name = f"AvoidClassesPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
                     prob += x[cls.sec_name, tsl] + x[other_cls_name, tsl] <= 1, constraint_name
 
+    
 
     # Penalty for avoiding timeslots
     constraint_counter = 0  # Initialize a counter for constraint names
