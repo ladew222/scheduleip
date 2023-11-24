@@ -11,11 +11,56 @@ from datetime import datetime, timedelta
 import calendar
 app = Flask(__name__)
 import hashlib
+import pandas as pd
+from deap import base, creator, tools, algorithms
+import random
+
+# Define the problem class
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMax)
+
+toolbox = base.Toolbox()
+
 
 def string_to_color(s):
     # Use a hash function to convert the string to a hexadecimal color code
     hash_object = hashlib.md5(s.encode())
     return '#' + hash_object.hexdigest()[:6]
+
+
+def create_individual(class_sections, full_meeting_times):
+    """
+    Create an individual schedule by assigning timeslots to class sections while avoiding unwanted timeslots.
+
+    Args:
+        class_sections (list): List of class sections with their details.
+        full_meeting_times (list): List of all available meeting times.
+
+    Returns:
+        A list representing an individual schedule.
+    """
+    individual = []
+    for cls in class_sections:
+        # Filter available timeslots for this class section to avoid unwanted timeslots
+        available_timeslots = [ts for ts in full_meeting_times if f"{ts['days']} - {ts['start_time']}" not in cls.unwanted_timeslots]
+
+        # If no available timeslots are left, use the full meeting times
+        if not available_timeslots:
+            available_timeslots = full_meeting_times
+
+        # Choose a random timeslot from the available timeslots
+        chosen_timeslot = random.choice(available_timeslots)
+
+        # Add the chosen timeslot to the individual schedule
+        individual.append({
+            'section_name': cls.sec_name,
+            'timeslot': f"{chosen_timeslot['days']} - {chosen_timeslot['start_time']}",
+            'other_details': cls  # You can include other details as needed
+        })
+
+    return individual
+
+
 
 
 def create_meeting_times():
@@ -823,6 +868,132 @@ def process_calendar_data(three_credit_results, remaining_class_results):
     return calendar_data
 
 
+def combine_and_expand_schedule(three_credit_results, remaining_class_results, meeting_times, class_sections):
+    combined_schedule = []
+
+    # Expand and add three-credit class schedules
+    for result in three_credit_results['scheduled_sections']:
+        cls = next((c for c in class_sections if c.sec_name == result['section_name']), None)
+        if cls:
+            # Expand each three-credit class into individual time slots based on its meeting days
+            for day in cls.week_days.split():
+                day_specific_slot = f"{day} - {result['timeslot'].split(' - ')[1]}"
+                combined_schedule.append({
+                    'section_name': result['section_name'],
+                    'timeslot': day_specific_slot,
+                    'instructor': cls.faculty1,
+                    'room': cls.room,
+                    'min_credit': cls.min_credit,
+                    'unwanted_timeslots': cls.unwanted_timeslots
+                })
+
+    # Add one-credit class schedules with proper timeslot format
+    for result in remaining_class_results['scheduled_sections']:
+        cls = next((c for c in class_sections if c.sec_name == result['section_name']), None)
+        if cls:
+            combined_schedule.append({
+                'section_name': result['section_name'],
+                'timeslot': result['timeslot'],
+                'instructor': cls.faculty1,
+                'room': cls.room,
+                'min_credit': cls.min_credit,
+                'unwanted_timeslots': cls.unwanted_timeslots
+            })
+
+    return combined_schedule
+
+
+def expand_three_credit_class(class_result, meeting_times, class_section):
+    # Logic to expand a three-credit class into individual time slots
+    expanded_slots = []
+    days = class_result['timeslot'].split(' ')[0].split()
+    for day in days:
+        expanded_slot = {
+            'section_name': class_result['section_name'],
+            'timeslot': f"{day} - {class_result['timeslot'].split(' ')[1]}",
+            'instructor': class_section.faculty1,
+            'room': class_section.room,
+            'min_credit': class_section.min_credit,
+            'unwanted_timeslots': class_section.unwanted_timeslots
+        }
+        expanded_slots.append(expanded_slot)
+    return expanded_slots
+
+import random
+
+def custom_mutate(individual, full_meeting_times, mutpb):
+    """
+    Mutate an individual by randomly changing the timeslot of a class while respecting the days of the week.
+
+    Args:
+        individual: The individual to mutate.
+        full_meeting_times: A list of available meeting times.
+        mutpb: The probability of mutating each gene.
+
+    Returns:
+        A tuple of one individual.
+    """
+    for i in range(len(individual)):
+        if random.random() < mutpb:
+            # Extract the day part from the individual's current timeslot
+            current_day = individual[i]['timeslot'].split(' - ')[0]
+
+            # Filter available timeslots for the same day of the week
+            same_day_timeslots = [ts for ts in full_meeting_times if current_day in ts['days']]
+
+            # Choose a random timeslot for mutation
+            if same_day_timeslots:
+                new_timeslot = random.choice(same_day_timeslots)
+                # Mutate the individual's timeslot
+                individual[i]['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
+
+    return individual,
+
+
+
+def merge_class_details(schedule_result, class_section, day=None):
+    # Merge details from class_section into the schedule result
+    merged_result = schedule_result.copy()
+    merged_result['instructor'] = class_section.faculty1
+    merged_result['room'] = class_section.room
+    merged_result['min_credit'] = class_section.min_credit
+    merged_result['unwanted_timeslots'] = class_section.unwanted_timeslots
+
+    if day:
+        # Adjust the timeslot for the specific day if provided
+        merged_result['timeslot'] = f"{day} - {schedule_result['timeslot'].split(' ')[1]}"
+    
+    return merged_result
+
+def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2):
+    creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
+    creator.create("Individual", list, fitness=creator.FitnessMin)
+
+    toolbox = base.Toolbox()
+    toolbox.register("individual", create_individual, combined_expanded_schedule, full_meeting_times)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    toolbox.register("evaluate", evaluateSchedule)
+    toolbox.register("mate", tools.cxTwoPoint)
+    toolbox.register("mutate", custom_mutate, mutation_rate=mutpb, available_timeslots=full_meeting_times)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+
+    population = toolbox.population(n=pop_size)
+
+    # Collecting statistics
+    stats = tools.Statistics(lambda ind: ind.fitness.values)
+    stats.register("avg", lambda x: sum(x) / len(x))
+    stats.register("min", min)
+    stats.register("max", max)
+
+    # Running the algorithm
+    final_population = algorithms.eaSimple(population, toolbox, cxpb=cxpb, mutpb=mutpb, ngen=ngen, stats=stats, verbose=True)
+
+    # Extracting the best individual
+    best_ind = tools.selBest(population, k=1)[0]
+    print("Best Schedule:", best_ind)
+    print("Best Fitness:", best_ind.fitness.values)
+
+    return final_population
 
 
 @app.route('/optimize', methods=['POST'])
@@ -883,6 +1054,29 @@ def optimize():
 
     # Sort the combined list by section name
     combined_scheduled_sections.sort(key=lambda x: x['section_name'])
+    
+    # Combine and expand the schedules
+    combined_expanded_schedule = combine_and_expand_schedule(
+    three_credit_results, 
+    remaining_class_results, 
+    create_full_meeting_times(), 
+    class_sections
+    )
+
+    # Evaluate the combined and expanded schedule
+    #evaluation_results = evaluateSchedule(combined_expanded_schedule)
+    
+     # Run the genetic algorithm
+    ga_results = run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2)
+    
+     # Prepare meeting times for the genetic algorithm
+    full_meeting_times = create_full_meeting_times()
+    
+    # Setup for genetic algorithm
+    # Here you pass combined_expanded_schedule to create_individual
+    toolbox.register("individual", create_individual, combined_expanded_schedule, full_meeting_times)
+    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    
 
     # Prepare the combined results dictionary
     combined_results = {
@@ -904,7 +1098,153 @@ def optimize():
 
 
 
-import pandas as pd
+def evaluateSchedule(individual):
+    overlap_penalty = 10
+    instructor_conflict_penalty = 5
+    room_conflict_penalty = 5
+    proximity_penalty = 2
+    unwanted_timeslot_penalty = 3
+
+    total_score = 0
+
+    # Dictionary to store the details of each class meeting
+    detailed_scores = {}
+
+    # Evaluate each class meeting in the individual schedule
+    for i, meeting in enumerate(individual):
+        class_score = 0
+
+        # Initialize counters for each type of violation
+        overlap_violations = 0
+        instructor_conflicts = 0
+        room_conflicts = 0
+        proximity_issues = 0
+        unwanted_timeslot_violations = 0
+
+        # Check for class overlaps, room conflicts, and instructor conflicts
+        for j, other_meeting in enumerate(individual):
+            if i != j and meeting['timeslot'] == other_meeting['timeslot']:
+                overlap_violations += 1
+                if meeting['room'] == other_meeting['room']:
+                    room_conflicts += 1
+                if meeting['instructor'] == other_meeting['instructor']:
+                    instructor_conflicts += 1
+
+        # Check for proximity issues for 1-credit classes
+        if meeting['min_credit'] == '1' and meeting['section_name'].endswith("_one_credit"):
+            base_sec_name = meeting['section_name'][:-11]
+            three_credit_class_meetings = [s for s in individual if s['section_name'] == base_sec_name]
+            for cls_3_meeting in three_credit_class_meetings:
+                time_diff = abs((datetime.strptime(meeting['timeslot'].split(' - ')[1], '%I:%M%p') - 
+                                 datetime.strptime(cls_3_meeting['timeslot'].split(' - ')[1], '%I:%M%p')).total_seconds()) / 3600
+                if time_diff > 2:  # Threshold for proximity
+                    proximity_issues += 1
+
+        # Check for unwanted timeslot violations
+        for unwanted_timeslot in meeting['unwanted_timeslots']:
+            unwanted_days, unwanted_time = unwanted_timeslot.split(' - ')
+            if unwanted_days in meeting['timeslot'] and unwanted_time == meeting['timeslot'].split(' - ')[1]:
+                unwanted_timeslot_violations += 1
+
+        # Calculate score for this class meeting
+        class_score = (overlap_violations * overlap_penalty +
+                       instructor_conflicts * instructor_conflict_penalty +
+                       room_conflicts * room_conflict_penalty +
+                       proximity_issues * proximity_penalty +
+                       unwanted_timeslot_violations * unwanted_timeslot_penalty)
+
+        # Aggregate score and store details
+        total_score += class_score
+        detailed_scores[meeting['section_name']] = {
+            'score': class_score,
+            'overlap_violations': overlap_violations,
+            'instructor_conflicts': instructor_conflicts,
+            'room_conflicts': room_conflicts,
+            'proximity_issues': proximity_issues,
+            'unwanted_timeslot_violations': unwanted_timeslot_violations
+        }
+
+    # Return a tuple containing one value: the total score
+    return total_score,
+
+
+
+def evaluateSchedule_old(combined_expanded_schedule):
+    overlap_penalty = 10
+    instructor_conflict_penalty = 5
+    room_conflict_penalty = 5
+    proximity_penalty = 2
+    unwanted_timeslot_penalty = 3
+
+    total_score = 0
+    detailed_scores = {}
+
+    # Evaluate each class meeting in the expanded schedule
+    for meeting in combined_expanded_schedule:
+        class_score = 0
+
+        # Initialize counters for each type of violation
+        overlap_violations = 0
+        instructor_conflicts = 0
+        room_conflicts = 0
+        proximity_issues = 0
+        unwanted_timeslot_violations = 0
+
+        # Check for class overlaps, room conflicts, and instructor conflicts
+        for other_meeting in combined_expanded_schedule:
+            if meeting != other_meeting and meeting['timeslot'] == other_meeting['timeslot']:
+                overlap_violations += 1
+                if meeting['room'] == other_meeting['room']:
+                    room_conflicts += 1
+                if meeting['instructor'] == other_meeting['instructor']:
+                    instructor_conflicts += 1
+
+        # Check for proximity issues for 1-credit classes
+        if meeting['min_credit'] == '1' and meeting['section_name'].endswith("_one_credit"):
+            base_sec_name = meeting['section_name'][:-11]
+            three_credit_class_meetings = [s for s in combined_expanded_schedule if s['section_name'] == base_sec_name]
+            for cls_3_meeting in three_credit_class_meetings:
+                time_diff = abs((datetime.strptime(meeting['timeslot'].split(' - ')[1], '%I:%M%p') - 
+                                 datetime.strptime(cls_3_meeting['timeslot'].split(' - ')[1], '%I:%M%p')).total_seconds()) / 3600
+                if time_diff > 2:  # Threshold for proximity
+                    proximity_issues += 1
+
+        # Check for unwanted timeslot violations
+        for unwanted_timeslot in meeting['unwanted_timeslots']:
+            unwanted_days, unwanted_time = unwanted_timeslot.split(' - ')
+            if unwanted_days in meeting['timeslot'] and unwanted_time == meeting['timeslot'].split(' - ')[1]:
+                unwanted_timeslot_violations += 1
+
+        # Calculate score for this class meeting
+        class_score = (overlap_violations * overlap_penalty +
+                       instructor_conflicts * instructor_conflict_penalty +
+                       room_conflicts * room_conflict_penalty +
+                       proximity_issues * proximity_penalty +
+                       unwanted_timeslot_violations * unwanted_timeslot_penalty)
+
+        # Aggregate score and store details
+        total_score += class_score
+        if meeting['section_name'] not in detailed_scores:
+            detailed_scores[meeting['section_name']] = {
+                'score': 0,
+                'overlap_violations': 0,
+                'instructor_conflicts': 0,
+                'room_conflicts': 0,
+                'proximity_issues': 0,
+                'unwanted_timeslot_violations': 0
+            }
+        detailed_scores[meeting['section_name']]['score'] += class_score
+        detailed_scores[meeting['section_name']]['overlap_violations'] += overlap_violations
+        detailed_scores[meeting['section_name']]['instructor_conflicts'] += instructor_conflicts
+        detailed_scores[meeting['section_name']]['room_conflicts'] += room_conflicts
+        detailed_scores[meeting['section_name']]['proximity_issues'] += proximity_issues
+        detailed_scores[meeting['section_name']]['unwanted_timeslot_violations'] += unwanted_timeslot_violations
+
+    return {
+        'total_score': total_score,
+        'detailed_scores': detailed_scores
+    }
+
 
 def process_uploaded_data(uploaded_file_data):
     try:
