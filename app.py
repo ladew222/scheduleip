@@ -14,6 +14,7 @@ import hashlib
 import pandas as pd
 from deap import base, creator, tools, algorithms
 import random
+import numpy as np
 
 # Define the problem class
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
@@ -28,21 +29,21 @@ def string_to_color(s):
     return '#' + hash_object.hexdigest()[:6]
 
 
-def create_individual(class_sections, full_meeting_times):
+def create_individual(combined_expanded_schedule, full_meeting_times):
     """
     Create an individual schedule by assigning timeslots to class sections while avoiding unwanted timeslots.
 
     Args:
-        class_sections (list): List of class sections with their details.
+        combined_expanded_schedule (list): List of class sections with their details.
         full_meeting_times (list): List of all available meeting times.
 
     Returns:
         A list representing an individual schedule.
     """
     individual = []
-    for cls in class_sections:
+    for cls in combined_expanded_schedule:
         # Filter available timeslots for this class section to avoid unwanted timeslots
-        available_timeslots = [ts for ts in full_meeting_times if f"{ts['days']} - {ts['start_time']}" not in cls.unwanted_timeslots]
+        available_timeslots = [ts for ts in full_meeting_times if f"{ts['days']} - {ts['start_time']}" not in cls.get('unwanted_timeslots', [])]
 
         # If no available timeslots are left, use the full meeting times
         if not available_timeslots:
@@ -55,7 +56,10 @@ def create_individual(class_sections, full_meeting_times):
         individual.append({
             'section_name': cls.sec_name,
             'timeslot': f"{chosen_timeslot['days']} - {chosen_timeslot['start_time']}",
-            'other_details': cls  # You can include other details as needed
+            'instructor': cls.faculty1,
+            'room': cls.room,
+            'min_credit': cls.min_credit,  # Ensure this attribute is included
+            'unwanted_timeslots': cls.unwanted_timeslots
         })
 
     return individual
@@ -469,8 +473,6 @@ def create_class_sections_from_data(class_sections_data):
         class_sections.append(class_section)
 
     return class_sections
-
-
 
 
 
@@ -972,18 +974,29 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     toolbox = base.Toolbox()
     toolbox.register("individual", create_individual, combined_expanded_schedule, full_meeting_times)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("evaluate", evaluateSchedule)
+
+    # Adjusting the evaluate function to use only the total_score from evaluateSchedule's output
+    def evaluate_wrapper(individual):
+        evaluation_results = evaluateSchedule(individual)
+        return evaluation_results['total_score'],
+
+    toolbox.register("evaluate", evaluate_wrapper)
     toolbox.register("mate", tools.cxTwoPoint)
     toolbox.register("mutate", custom_mutate, mutation_rate=mutpb, available_timeslots=full_meeting_times)
     toolbox.register("select", tools.selTournament, tournsize=3)
 
     population = toolbox.population(n=pop_size)
+    
+    # Evaluate the entire population's fitness
+    fitnesses = list(map(toolbox.evaluate, population))
+    for ind, fit in zip(population, fitnesses):
+        ind.fitness.values = fit
 
     # Collecting statistics
     stats = tools.Statistics(lambda ind: ind.fitness.values)
-    stats.register("avg", lambda x: sum(x) / len(x))
-    stats.register("min", min)
-    stats.register("max", max)
+    stats.register("avg", np.mean)
+    stats.register("min", np.min)
+    stats.register("max", np.max)
 
     # Running the algorithm
     final_population = algorithms.eaSimple(population, toolbox, cxpb=cxpb, mutpb=mutpb, ngen=ngen, stats=stats, verbose=True)
@@ -994,6 +1007,7 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     print("Best Fitness:", best_ind.fitness.values)
 
     return final_population
+
 
 
 @app.route('/optimize', methods=['POST'])
@@ -1045,55 +1059,59 @@ def optimize():
     remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
 
     # Optimize the schedule for remaining classes
-    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
+    # Process the data for calendar display
     calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
-    
-    # Combine results from both optimizations
-    combined_scheduled_sections = three_credit_results['scheduled_sections'] + remaining_class_results['scheduled_sections']
-
-    # Sort the combined list by section name
-    combined_scheduled_sections.sort(key=lambda x: x['section_name'])
     
     # Combine and expand the schedules
     combined_expanded_schedule = combine_and_expand_schedule(
-    three_credit_results, 
-    remaining_class_results, 
-    create_full_meeting_times(), 
-    class_sections
+        three_credit_results, 
+        remaining_class_results, 
+        create_full_meeting_times(), 
+        class_sections
     )
 
-    # Evaluate the combined and expanded schedule
-    #evaluation_results = evaluateSchedule(combined_expanded_schedule)
-    
-     # Run the genetic algorithm
-    ga_results = run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2)
-    
-     # Prepare meeting times for the genetic algorithm
-    full_meeting_times = create_full_meeting_times()
-    
-    # Setup for genetic algorithm
-    # Here you pass combined_expanded_schedule to create_individual
-    toolbox.register("individual", create_individual, combined_expanded_schedule, full_meeting_times)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    
+    # Evaluate the combined and expanded schedule using PuLP results
+    pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
+    pulp_score = pulp_evaluation_results['total_score']
 
-    # Prepare the combined results dictionary
-    combined_results = {
-        'scheduled_sections': combined_scheduled_sections,
-        'calendar_events': calendar_events,
-        'message': 'Success' if (three_credit_results['status'] == 'Success' and remaining_class_results['status'] == 'Success') else 'Partial Success'
+    # Run the genetic algorithm
+    ga_results = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2)
+    best_ga_individual = tools.selBest(ga_results, k=1)[0]
+    ga_evaluation_results = evaluateSchedule(best_ga_individual)
+    ga_score = ga_evaluation_results['total_score']
+
+    # Compare PuLP and GA results
+    improvement = pulp_score - ga_score
+
+    # Prepare the final results
+    final_results = {
+        'pulp_results': {
+            'schedule': combined_expanded_schedule,
+            'evaluation': pulp_evaluation_results,
+            'score': pulp_score
+        },
+        'ga_results': {
+            'schedule': best_ga_individual,
+            'evaluation': ga_evaluation_results,
+            'score': ga_score
+        },
+        'improvement': improvement,
+        'message': 'Optimization completed',
+        'calendar_events': calendar_events
     }
 
-    
     # Check if optimization was successful
-    if combined_results:
-        return jsonify(combined_results)
+    if final_results:
+        return jsonify(final_results)
     else:
         error_response = {
             'error': 'Optimization failed or no classes provided'
         }
         return jsonify(error_response), 400
+
+
 
 
 
@@ -1164,8 +1182,33 @@ def evaluateSchedule(individual):
             'unwanted_timeslot_violations': unwanted_timeslot_violations
         }
 
-    # Return a tuple containing one value: the total score
-    return total_score,
+    # Aggregate score and store details
+    for i, meeting in enumerate(individual):
+        # Existing code to calculate violations and score for each meeting...
+
+        # Aggregate score and store details
+        total_score += class_score
+        if meeting['section_name'] not in detailed_scores:
+            detailed_scores[meeting['section_name']] = {
+                'score': 0,
+                'overlap_violations': 0,
+                'instructor_conflicts': 0,
+                'room_conflicts': 0,
+                'proximity_issues': 0,
+                'unwanted_timeslot_violations': 0
+            }
+        detailed_scores[meeting['section_name']]['score'] += class_score
+        detailed_scores[meeting['section_name']]['overlap_violations'] += overlap_violations
+        detailed_scores[meeting['section_name']]['instructor_conflicts'] += instructor_conflicts
+        detailed_scores[meeting['section_name']]['room_conflicts'] += room_conflicts
+        detailed_scores[meeting['section_name']]['proximity_issues'] += proximity_issues
+        detailed_scores[meeting['section_name']]['unwanted_timeslot_violations'] += unwanted_timeslot_violations
+
+    # Return a dictionary with total score and detailed scores
+    return {
+        'total_score': total_score,
+        'detailed_scores': detailed_scores
+    }
 
 
 
