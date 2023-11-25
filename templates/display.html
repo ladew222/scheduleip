@@ -189,7 +189,15 @@
         
     <!-- Display Optimization Results (Initially hidden) -->
     <div id="optimization-results" style="display: none;">
+        <!-- Schedule Selector Dropdown -->
+        <div class="form-group">
+            <label for="scheduleSelector">Select a Schedule:</label>
+            <select id="scheduleSelector" class="form-control">
+                <!-- Options will be added dynamically here -->
+            </select>
+        </div>
         <h2>Optimization Results</h2>
+        <span id="scheduleDisplay"></span>
         <!-- Display optimization results here -->
         <ul id="results-list">
             <!-- Results will be added here using JavaScript -->

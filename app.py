@@ -54,15 +54,15 @@ def create_individual(combined_expanded_schedule, full_meeting_times):
 
         # Add the chosen timeslot to the individual schedule
         individual.append({
-            'section_name': cls.sec_name,
+            'section_name': cls['section_name'],
             'timeslot': f"{chosen_timeslot['days']} - {chosen_timeslot['start_time']}",
-            'instructor': cls.faculty1,
-            'room': cls.room,
-            'min_credit': cls.min_credit,  # Ensure this attribute is included
-            'unwanted_timeslots': cls.unwanted_timeslots
+            'instructor': cls['instructor'],
+            'room': cls['room'],
+            'min_credit': cls['min_credit'],  # Ensure this attribute is included
+            'unwanted_timeslots': cls['unwanted_timeslots']
         })
 
-    return individual
+    return creator.Individual(individual)
 
 
 
@@ -823,6 +823,49 @@ def get_weekday_date(reference_date, target_weekday):
     days_difference = target_weekday - reference_weekday
     return reference_date + timedelta(days=days_difference)
 
+def process_calendar_data_expanded(expanded_schedule):
+    calendar_data = []
+    color_cache = {}
+
+    reference_date = datetime.today()
+    while reference_date.weekday() != 2:  # Adjust to the nearest Wednesday
+        reference_date += timedelta(days=1)
+
+    weekday_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
+
+    for result in expanded_schedule:
+        section_name = result['section_name']
+        timeslot = result['timeslot']
+        day, start_time = timeslot.split(' - ')
+        
+        # Check if day is 'nan' or not in weekday_map
+        if day == 'nan' or day not in weekday_map:
+            print(f"Skipping invalid day '{day}' in timeslot: {timeslot}")
+            continue
+
+        class_date = get_weekday_date(reference_date, weekday_map[day])
+        start_datetime = datetime.combine(class_date, datetime.strptime(start_time, '%I:%M%p').time())
+        duration = timedelta(hours=1)
+        end_datetime = start_datetime + duration
+
+        course_prefix = section_name.split('-')[0]
+        if course_prefix not in color_cache:
+            color_cache[course_prefix] = str(string_to_color(course_prefix))
+        color = color_cache[course_prefix]
+
+        calendar_event = {
+            'section_name': section_name,
+            'start': start_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+            'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
+            'instructor': result['instructor'],
+            'room': result['room'],
+            'color': color
+        }
+        calendar_data.append(calendar_event)
+
+    return calendar_data
+
+
 def process_calendar_data(three_credit_results, remaining_class_results):
     calendar_data = []
     color_cache = {}
@@ -982,7 +1025,8 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
 
     toolbox.register("evaluate", evaluate_wrapper)
     toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", custom_mutate, mutation_rate=mutpb, available_timeslots=full_meeting_times)
+    toolbox.register("individual", create_individual, class_sections=combined_expanded_schedule, full_meeting_times=create_full_meeting_times())
+    toolbox.register("mutate", custom_mutate, full_meeting_times=create_full_meeting_times(), mutpb=0.2)
     toolbox.register("select", tools.selTournament, tournsize=3)
 
     population = toolbox.population(n=pop_size)
@@ -1001,12 +1045,13 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     # Running the algorithm
     final_population = algorithms.eaSimple(population, toolbox, cxpb=cxpb, mutpb=mutpb, ngen=ngen, stats=stats, verbose=True)
 
-    # Extracting the best individual
-    best_ind = tools.selBest(population, k=1)[0]
-    print("Best Schedule:", best_ind)
-    print("Best Fitness:", best_ind.fitness.values)
+    # Extracting the top 5 individuals
+    top_individuals = tools.selBest(population, k=5)
 
-    return final_population
+    # Prepare a list of tuples (schedule, fitness) for the top individuals
+    top_schedules = [(ind, ind.fitness.values[0]) for ind in top_individuals]
+
+    return top_schedules
 
 
 
@@ -1064,7 +1109,7 @@ def optimize():
     # Process the data for calendar display
     calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
     
-    # Combine and expand the schedules
+  # Combine and expand the schedules
     combined_expanded_schedule = combine_and_expand_schedule(
         three_credit_results, 
         remaining_class_results, 
@@ -1076,43 +1121,32 @@ def optimize():
     pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
     pulp_score = pulp_evaluation_results['total_score']
 
-    # Run the genetic algorithm
-    ga_results = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2)
-    best_ga_individual = tools.selBest(ga_results, k=1)[0]
-    ga_evaluation_results = evaluateSchedule(best_ga_individual)
-    ga_score = ga_evaluation_results['total_score']
+    # Run the genetic algorithm to get top schedules
+    ga_schedules = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2)
 
-    # Compare PuLP and GA results
-    improvement = pulp_score - ga_score
+    # Combine PuLP and GA schedules and sort them by score
+    all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA'} for schedule, score in ga_schedules]
+    all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP'})
+    all_schedules_sorted = sorted(all_schedules, key=lambda x: x['score'])
+
+    # Process the data for calendar display for each schedule
+    calendar_events = []
+    for schedule in all_schedules_sorted:
+        events_for_schedule = process_calendar_data_expanded(schedule['schedule'])
+        calendar_events.append({
+            'schedule_info': schedule,
+            'events': events_for_schedule
+        })
 
     # Prepare the final results
     final_results = {
-        'pulp_results': {
-            'schedule': combined_expanded_schedule,
-            'evaluation': pulp_evaluation_results,
-            'score': pulp_score
-        },
-        'ga_results': {
-            'schedule': best_ga_individual,
-            'evaluation': ga_evaluation_results,
-            'score': ga_score
-        },
-        'improvement': improvement,
-        'message': 'Optimization completed',
-        'calendar_events': calendar_events
+        'sorted_schedules': all_schedules_sorted,
+        'calendar_events': calendar_events,
+        'message': 'Optimization completed'
     }
 
-    # Check if optimization was successful
-    if final_results:
-        return jsonify(final_results)
-    else:
-        error_response = {
-            'error': 'Optimization failed or no classes provided'
-        }
-        return jsonify(error_response), 400
-
-
-
+    # Return the final results
+    return jsonify(final_results)
 
 
 

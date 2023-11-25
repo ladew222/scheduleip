@@ -1,14 +1,62 @@
- // Function to convert an array to a string with a specified delimiter
+var calendar; // Declare it globally
+var globalResponse = {};
+
+// Function to convert an array to a string with a specified delimiter
  function arrayToString(arr, delimiter) {
     return arr.join(delimiter);
 }
 // Function to update the calendar with events
 function updateCalendar(events) {
-    // Assuming you have a function to add events to your Simple Calendar
-    // This is a pseudocode example, actual implementation may vary
-    simpleCalendar.clearEvents(); // Clear existing events
-    events.forEach(event => simpleCalendar.addEvent(event));
+    if (calendar) {
+        calendar.removeAllEvents(); // Assuming 'removeAllEvents' is the correct method
+        events.events.forEach(event => {
+            calendar.addEvent({
+                title: event.section_name +" "+ event.instructor + " (" +  event.room +")", // Assuming 'section_name' is used as the event title
+                start: event.start,
+                location: event.room,
+                description: event.instructor,
+                end: event.end,
+                color: event.color, 
+                extendedProps: {
+                    department: 'BioChemistry',
+                    instructor: event.instructor,
+                    room: event.room,
+                    capacity: event.capacity,
+                    buidling: event.bldg,
+                  },
+            });
+        });
+        calendar.render(); // Re-render the calendar
+    }
 }
+
+
+
+
+// Function to load a selected schedule
+function loadSelectedSchedule(val) {
+    if (globalResponse && globalResponse.sorted_schedules && globalResponse.sorted_schedules.length > 0) {
+        $('#scheduleDisplay').html(createResultsTable(globalResponse.sorted_schedules[val])); // Display the schedule
+        updateCalendar(globalResponse.calendar_events[val]); // Update the calendar
+    }
+}
+
+
+// Function to populate the schedule dropdown
+function populateScheduleDropdown(schedules) {
+    var $scheduleSelector = $('#scheduleSelector');
+    $scheduleSelector.empty(); // Clear existing options
+
+    schedules.forEach((schedule, index) => {
+        $scheduleSelector.append($('<option>', {
+            value: index,
+            text: 'Schedule ' + (index + 1)
+        }));
+    });
+
+
+}
+
 
 
 // Function to convert an array of objects to a CSV string
@@ -40,7 +88,7 @@ function createResultsTable(data) {
     let table = '<table style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">';
     table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Instructor</th><th>Timeslot</th></tr>';
 
-    data.forEach(item => {
+    data.schedule.forEach(item => {
         table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.instructor}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td></tr>`;
     });
 
@@ -63,13 +111,21 @@ function getCheckboxValue($row) {
 $(document).ready(function () {
     const tagifyInstances = {};
 
+
+        // jQuery event handler for dropdown change
+    $('#scheduleSelector').change(function() {
+        var selectedScheduleIndex = $(this).val();
+        loadSelectedSchedule(selectedScheduleIndex);
+    });
+
+
     // Hold All Button Click Event
     $('#hold-all').on('click', function () {
         $(".hold-checkbox").prop("checked", true);
     });
 
     var calendarEl = document.getElementById('full-calendar');
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    calendar = new FullCalendar.Calendar(calendarEl, {
         // Configuration options go here
         initialView: 'timeGridWeek',
         displayEventTime: false,
@@ -326,47 +382,21 @@ $(document).ready(function () {
             data: JSON.stringify(requestData),
             contentType: 'application/json',
             success: function (response) {
-                // Handle the optimization results
                 console.log('Optimization successful:', response);
                 $("#optimization-results").fadeIn(1000); // Fade in slowly over 1 second
                 $("#class-table").fadeOut(1000); // Fade out slowly over 1 second
-                // Display the results in the 'results-list' div
-                $('#results-list').empty(); // Clear any previous results
-                if (response.message === 'Success') {
-                    $('#results-list').append('<p>' + createResultsTable(response.scheduled_sections) + '</p>');
+                // Check if multiple schedules are returned
+                if (response.calendar_events && response.calendar_events.length > 0) {
+                    globalResponse = response; // Assign the entire response here
+                    // Populate the dropdown with schedules
+                    populateScheduleDropdown(globalResponse.sorted_schedules);
+            
+                    // Load the first schedule by default
+                    loadSelectedSchedule(0);
+                    
                 } else {
-                    $('#results-list').html('<p>Error: ' + response.message + '</p>');
+                    console.error('No schedules in response');
                 }
-                 // Check if calendar events are available in the response
-                if (response.calendar_events) {
-                    // Clear any existing events in the calendar
-                    calendar.removeAllEvents();
-
-                    // Add new events to the calendar
-                    response.calendar_events.forEach(event => {
-                        calendar.addEvent({
-                            title: event.section_name +" "+ event.instructor + " (" +  event.room +")", // Assuming 'section_name' is used as the event title
-                            start: event.start,
-                            location: event.room,
-                            description: event.instructor,
-                            end: event.end,
-                            color: event.color, 
-                            extendedProps: {
-                                department: 'BioChemistry',
-                                instructor: event.instructor,
-                                room: event.room,
-                                capacity: event.capacity,
-                                buidling: event.bldg,
-                              },
-                        });
-                    });
-
-                    // Render or rerender the calendar
-                    calendar.render();
-                } else {
-                    console.error('No calendar events in response');
-                }
-
             },
             error: function (error) {
                 console.error('Error:', error);

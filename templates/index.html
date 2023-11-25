@@ -38,6 +38,10 @@
         
         <!-- Form Section -->
         <div class="mt-4 text-center"> <!-- Added text-center to center everything inside -->
+            <h2 class="mb-3 text-white">Select a Schedule</h2>
+            <select id="scheduleSelector" class="form-control" onchange="loadSelectedSchedule()">
+                <!-- Options will be dynamically populated -->
+            </select>
             <h2 class="mb-3 text-white">Upload a CSV File</h2>
             <form method="POST" action="/upload" enctype="multipart/form-data">
                 <div class="form-group load-csv">
