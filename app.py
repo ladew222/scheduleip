@@ -1054,28 +1054,33 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     return top_schedules
 
 
+def count_slot_differences(pulp_schedule, ga_schedule):
+    differences = 0
+    pulp_sections = {section['section_name']: section['timeslot'] for section in pulp_schedule}
+    
+    for section in ga_schedule:
+        section_name = section['section_name']
+        if pulp_sections.get(section_name) != section['timeslot']:
+            differences += 1
+
+    return differences
 
 @app.route('/optimize', methods=['POST'])
 def optimize():
-    # Get the JSON data from the request
     data = request.get_json()
 
-    # Extract class section data and additional parameters
     class_sections_data = data.get('classData', [])
     class_penalty = data.get('classPenalty', 0)
     move_penalty = data.get('movePenalty', 0)
     blocked_slot_penalty = data.get('blockedSlotPenalty', 0)
     hold_penalty = data.get('holdPenalty', 0)
 
-    # Convert the class section data to ClassSection objects
     class_sections = create_class_sections_from_data(class_sections_data)
 
-    # Split 4-credit classes and prepare for 3-credit optimization
     three_credit_sections = []
     remaining_class_sections = []
     for class_section in class_sections:
         if int(class_section.min_credit) == 4:
-            # Split into two sections: one with 3 credits, another with 1 credit
             three_credit_section = class_section.copy()
             three_credit_section.min_credit = '3'
             one_credit_section = class_section.copy()
@@ -1088,48 +1093,33 @@ def optimize():
         else:
             remaining_class_sections.append(class_section)
 
-    # Create a MeetingTimes object
     meeting_times = create_meeting_times()
 
-    # Optimize the schedule for 3-credit classes
     three_credit_results = optimize_schedule(three_credit_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
-    # Extract used timeslots from the results
     used_timeslots = set()
     for section in three_credit_results['scheduled_sections']:
         used_timeslots.add(section['timeslot'])
 
-    # Determine remaining available timeslots
     all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
     remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
 
-    # Optimize the schedule for remaining classes
     remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
-    # Process the data for calendar display
     calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
-    
-  # Combine and expand the schedules
-    combined_expanded_schedule = combine_and_expand_schedule(
-        three_credit_results, 
-        remaining_class_results, 
-        create_full_meeting_times(), 
-        class_sections
-    )
 
-    # Evaluate the combined and expanded schedule using PuLP results
+    combined_expanded_schedule = combine_and_expand_schedule(three_credit_results, remaining_class_results, create_full_meeting_times(), class_sections)
+
     pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
     pulp_score = pulp_evaluation_results['total_score']
 
-    # Run the genetic algorithm to get top schedules
     ga_schedules = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2)
 
-    # Combine PuLP and GA schedules and sort them by score
-    all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA'} for schedule, score in ga_schedules]
-    all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP'})
+    all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA', 'slot_differences': count_slot_differences(combined_expanded_schedule, schedule)} for schedule, score in ga_schedules]
+    all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
+
     all_schedules_sorted = sorted(all_schedules, key=lambda x: x['score'])
 
-    # Process the data for calendar display for each schedule
     calendar_events = []
     for schedule in all_schedules_sorted:
         events_for_schedule = process_calendar_data_expanded(schedule['schedule'])
@@ -1138,14 +1128,12 @@ def optimize():
             'events': events_for_schedule
         })
 
-    # Prepare the final results
     final_results = {
         'sorted_schedules': all_schedules_sorted,
         'calendar_events': calendar_events,
         'message': 'Optimization completed'
     }
 
-    # Return the final results
     return jsonify(final_results)
 
 
