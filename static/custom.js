@@ -38,6 +38,8 @@ function loadSelectedSchedule(val) {
     if (globalResponse && globalResponse.sorted_schedules && globalResponse.sorted_schedules.length > 0) {
         $('#scheduleDisplay').html(createResultsTable(globalResponse.sorted_schedules[val])); // Display the schedule
         updateCalendar(globalResponse.calendar_events[val]); // Update the calendar
+        $('#algorithmType').text(globalResponse.sorted_schedules[val].algorithm);
+        $('#scheduleScore').text(globalResponse.sorted_schedules[val].score);
     }
 }
 

@@ -1041,17 +1041,37 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     stats.register("avg", np.mean)
     stats.register("min", np.min)
     stats.register("max", np.max)
-
-    # Running the algorithm
+ 
+   # Running the algorithm
     final_population = algorithms.eaSimple(population, toolbox, cxpb=cxpb, mutpb=mutpb, ngen=ngen, stats=stats, verbose=True)
 
-    # Extracting the top 5 individuals
-    top_individuals = tools.selBest(population, k=5)
+    # Sort the entire population based on fitness scores (ascending order)
+    sorted_population = sorted(population, key=lambda ind: ind.fitness.values[0])
 
-    # Prepare a list of tuples (schedule, fitness) for the top individuals
-    top_schedules = [(ind, ind.fitness.values[0]) for ind in top_individuals]
+    # Initialize an empty list for top unique schedules
+    top_unique_schedules = []
 
-    return top_schedules
+    # Set to store used scores for uniqueness
+    used_scores = set()
+
+    # Iterate over the sorted population
+    for ind in sorted_population:
+        fitness_score = ind.fitness.values[0]
+
+        # Check if the score is unique
+        if fitness_score not in used_scores:
+            # Add the individual and its score to the top unique schedules
+            top_unique_schedules.append((ind, fitness_score))
+            # Add the score to the used scores set
+            used_scores.add(fitness_score)
+
+        # Stop if we have collected 5 unique schedules
+        if len(top_unique_schedules) == 5:
+            break
+
+    # Return the top unique schedules
+    return top_unique_schedules
+
 
 
 def count_slot_differences(pulp_schedule, ga_schedule):
@@ -1138,32 +1158,134 @@ def optimize():
 
 
 
+from datetime import datetime
+
 def evaluateSchedule(individual):
-    overlap_penalty = 10
-    instructor_conflict_penalty = 5
-    room_conflict_penalty = 5
+    # Define penalties
+    overlap_penalty = 25
+    instructor_conflict_penalty = 30
+    room_conflict_penalty = 20
     proximity_penalty = 2
     unwanted_timeslot_penalty = 3
+    pattern_violation_penalty = 30
+    mutual_exclusion_penalty = 2
+    same_day_penalty = 15  # Penalty for class sections on the same day
 
+
+    # Initialize scoring variables
     total_score = 0
-
-    # Dictionary to store the details of each class meeting
     detailed_scores = {}
+    class_timings = {}
+    class_days = {}
+
+
+    # Function to check if the class follows the MWF or TuTh pattern
+    def follows_desired_pattern(timeslots):
+        mwf = all(['M' in ts and 'W' in ts and 'F' in ts for ts in timeslots])
+        tuth = all(['Tu' in ts and 'Th' in ts for ts in timeslots])
+        return mwf or tuth
+
+    # Evaluate each class meeting
+    for i, meeting in enumerate(individual):
+        class_score = 0
+        overlap_violations = 0
+        instructor_conflicts = 0
+        room_conflicts = 0
+        proximity_issues = 0
+        unwanted_timeslot_violations = 0
+        mutual_exclusion_violations = 0
+
+        # Store timing for classes 3+ credits
+        if int(meeting['min_credit']) >= 3:
+            course_identifier = meeting['section_name'].split('_')[0]
+            class_timings.setdefault(course_identifier, set()).add(meeting['timeslot'])
+            days = meeting['timeslot'].split(' - ')[0]
+            class_days.setdefault(course_identifier, set()).update(days.split())
+
+        # Check for overlaps, conflicts, and violations
+        for j, other_meeting in enumerate(individual):
+            if i != j:
+                if meeting['timeslot'] == other_meeting['timeslot']:
+                    overlap_violations += 1
+                    if meeting['room'] == other_meeting['room']:
+                        room_conflicts += 1
+                    if meeting['instructor'] == other_meeting['instructor']:
+                        instructor_conflicts += 1
+
+                # Mutual exclusion violations
+                mutually_exclusive_sections = meeting['restrictions'].split(';')
+                if other_meeting['section_name'] in mutually_exclusive_sections:
+                    mutual_exclusion_violations += 1
+                    
+        # Check for pattern matching and same day violations
+        for course, timeslots in class_timings.items():
+            if not follows_desired_pattern(timeslots):
+                pattern_violation = pattern_violation_penalty * len(timeslots)
+                total_score += pattern_violation
+
+        # Calculate score for this class meeting
+        class_score = (overlap_violations * overlap_penalty +
+                       instructor_conflicts * instructor_conflict_penalty +
+                       room_conflicts * room_conflict_penalty +
+                       proximity_issues * proximity_penalty +
+                       unwanted_timeslot_violations * unwanted_timeslot_penalty +
+                       mutual_exclusion_violations * mutual_exclusion_penalty)
+
+        # Update total score and details
+        total_score += class_score
+        detailed_scores[meeting['section_name']] = {
+            'score': class_score,
+            'overlap_violations': overlap_violations,
+            'instructor_conflicts': instructor_conflicts,
+            'room_conflicts': room_conflicts,
+            'proximity_issues': proximity_issues,
+            'unwanted_timeslot_violations': unwanted_timeslot_violations,
+            'mutual_exclusion_violations': mutual_exclusion_violations
+        }
+
+    # Check for pattern matching
+    for course, timeslots in class_timings.items():
+        if not follows_desired_pattern(timeslots):
+            pattern_violation = pattern_violation_penalty * len(timeslots)
+            total_score += pattern_violation
+            for meeting in individual:
+                if meeting['section_name'].startswith(course):
+                    detailed_scores[meeting['section_name']]['pattern_violation'] = pattern_violation
+                    
+    # Same day violations
+        if len(class_days[course]) < len(timeslots):
+            same_day_violation = same_day_penalty * (len(timeslots) - len(class_days[course]))
+            total_score += same_day_violation
+
+            # Update detailed scores for each class meeting
+            for section in detailed_scores:
+                if section.startswith(course):
+                    detailed_scores[section].setdefault('same_day_violation', 0)
+                    detailed_scores[section]['same_day_violation'] += same_day_violation
+
+    return {'total_score': total_score, 'detailed_scores': detailed_scores}
+
+
 
     # Evaluate each class meeting in the individual schedule
     for i, meeting in enumerate(individual):
         class_score = 0
-
-        # Initialize counters for each type of violation
         overlap_violations = 0
         instructor_conflicts = 0
         room_conflicts = 0
         proximity_issues = 0
         unwanted_timeslot_violations = 0
 
+        # Check if the class is 3+ credits and store its timing
+        if int(meeting['min_credit']) >= 3:
+            course_identifier = meeting['section_name'].split('_')[0]
+            if course_identifier not in class_timings:
+                class_timings[course_identifier] = set()
+            class_timings[course_identifier].add(meeting['timeslot'])
+
         # Check for class overlaps, room conflicts, and instructor conflicts
-        for j, other_meeting in enumerate(individual):
-            if i != j and meeting['timeslot'] == other_meeting['timeslot']:
+        for other_meeting in individual:
+            if meeting != other_meeting and meeting['timeslot'] == other_meeting['timeslot']:
                 overlap_violations += 1
                 if meeting['room'] == other_meeting['room']:
                     room_conflicts += 1
@@ -1186,12 +1308,21 @@ def evaluateSchedule(individual):
             if unwanted_days in meeting['timeslot'] and unwanted_time == meeting['timeslot'].split(' - ')[1]:
                 unwanted_timeslot_violations += 1
 
-        # Calculate score for this class meeting
+        # Check if the class is 3+ credits and store its timing
+        if int(meeting['min_credit']) >= 3:
+            course_identifier = meeting['section_name'].split('_')[0]  # Extract course identifier
+            if course_identifier not in class_timings:
+                class_timings[course_identifier] = set()
+            class_timings[course_identifier].add(meeting['timeslot'])
+
+       # Calculate score for this class meeting
         class_score = (overlap_violations * overlap_penalty +
                        instructor_conflicts * instructor_conflict_penalty +
                        room_conflicts * room_conflict_penalty +
                        proximity_issues * proximity_penalty +
-                       unwanted_timeslot_violations * unwanted_timeslot_penalty)
+                       unwanted_timeslot_violations * unwanted_timeslot_penalty,
+                       mutual_exclusion_violations * mutual_exclusion_penalty)
+
 
         # Aggregate score and store details
         total_score += class_score
@@ -1201,37 +1332,20 @@ def evaluateSchedule(individual):
             'instructor_conflicts': instructor_conflicts,
             'room_conflicts': room_conflicts,
             'proximity_issues': proximity_issues,
-            'unwanted_timeslot_violations': unwanted_timeslot_violations
+            'unwanted_timeslot_violations': unwanted_timeslot_violations,
+            'mutual_exclusion_violations': mutual_exclusion_violations
         }
 
-    # Aggregate score and store details
-    for i, meeting in enumerate(individual):
-        # Existing code to calculate violations and score for each meeting...
+   # Check for pattern matching
+    for course, timeslots in class_timings.items():
+        if not follows_desired_pattern(timeslots):
+            pattern_violation = pattern_violation_penalty * len(timeslots)
+            total_score += pattern_violation
+            for meeting in individual:
+                if meeting['section_name'].startswith(course):
+                    detailed_scores[meeting['section_name']]['pattern_violation'] = pattern_violation
 
-        # Aggregate score and store details
-        total_score += class_score
-        if meeting['section_name'] not in detailed_scores:
-            detailed_scores[meeting['section_name']] = {
-                'score': 0,
-                'overlap_violations': 0,
-                'instructor_conflicts': 0,
-                'room_conflicts': 0,
-                'proximity_issues': 0,
-                'unwanted_timeslot_violations': 0
-            }
-        detailed_scores[meeting['section_name']]['score'] += class_score
-        detailed_scores[meeting['section_name']]['overlap_violations'] += overlap_violations
-        detailed_scores[meeting['section_name']]['instructor_conflicts'] += instructor_conflicts
-        detailed_scores[meeting['section_name']]['room_conflicts'] += room_conflicts
-        detailed_scores[meeting['section_name']]['proximity_issues'] += proximity_issues
-        detailed_scores[meeting['section_name']]['unwanted_timeslot_violations'] += unwanted_timeslot_violations
-
-    # Return a dictionary with total score and detailed scores
-    return {
-        'total_score': total_score,
-        'detailed_scores': detailed_scores
-    }
-
+    return {'total_score': total_score, 'detailed_scores': detailed_scores}
 
 
 def evaluateSchedule_old(combined_expanded_schedule):
