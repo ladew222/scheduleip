@@ -23,6 +23,8 @@ creator.create("Individual", list, fitness=creator.FitnessMax)
 
 toolbox = base.Toolbox()
 
+global_settings = {}
+
 
 def string_to_color(s):
     # Use a hash function to convert the string to a hexadecimal color code
@@ -447,7 +449,6 @@ class ClassSection:
             'holdValue': self.holdValue,
             'avoid_classes': self.avoid_classes,
             'restrictions': self.unwanted_timeslots,
-            'blocked_time_slots': self.blocked_time_slots
         }
         
     def copy(self):
@@ -588,7 +589,7 @@ def find_closest_slot(cls_1_slots, cls_3_slots):
     return min_diff
 
 
-def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
+def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslots):
     # Create a new list of timeslots based on the full meeting times
     full_meeting_times = create_full_meeting_times()
     full_timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in full_meeting_times]
@@ -608,23 +609,26 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
 
     # Create binary variables: x_ij = 1 if class i is in timeslot j
     x = pulp.LpVariable.dicts("x", 
-                              ((cls.sec_name, tsl) for cls in class_sections for tsl in available_timeslots),
+                              ((cls['section'], tsl) for cls in class_sections for tsl in available_timeslots),
                               cat='Binary')
 
     # Objective function: Minimize the total number of scheduled classes
-    prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections for tsl in available_timeslots)
+    prob += pulp.lpSum(x[cls['section'], tsl] for cls in class_sections for tsl in available_timeslots)
 
     # Constraint: Each class must be scheduled once
-    for cls in class_sections:
-        prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in available_timeslots) == 1, f"OneClassOneSlot_{cls.sec_name}"
+    for idx, cls in enumerate(class_sections):
+        constraint_name = f"OneClassOneSlot_{cls['section']}_{idx}"
+        prob += pulp.lpSum(x[cls['section'], tsl] for tsl in available_timeslots) == 1, constraint_name
+
+
 
     # Create a set of unique rooms
-    rooms = set(cls.room for cls in class_sections if cls.room.strip())
+    rooms = set(cls['room'] for cls in class_sections if cls['room'].strip())
 
     # Constraint: No two classes can be in the same room at the same timeslot
     for tsl in available_timeslots:
         for room in rooms:
-            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.room == room) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
+            prob += pulp.lpSum(x[cls['section'], tsl] for cls in class_sections if cls['room'] == room) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
 
     # Transform weekly unwanted timeslots to individual daily timeslots
     def transform_unwanted_timeslots(unwanted_timeslots):
@@ -637,12 +641,12 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
 
     # Constraint: Penalize classes assigned to blocked timeslots
     for cls in class_sections:
-        transformed_unwanted_timeslots = transform_unwanted_timeslots(cls.unwanted_timeslots)
+        transformed_unwanted_timeslots = transform_unwanted_timeslots(cls['unwanted_timeslots'])
         for tsl in available_timeslots:
             if tsl in transformed_unwanted_timeslots:
                 # Apply a penalty for scheduling a class in a blocked timeslot
-                constraint_name = f"BlockedTimeslotPenalty_{cls.sec_name}_{tsl}"
-                prob += blocked_slot_penalty * x[cls.sec_name, tsl], constraint_name
+                constraint_name = f"BlockedTimeslotPenalty_{cls['section']}_{tsl}"
+                prob += global_settings['blocked_slot_penalty'] * x[cls['section'], tsl], constraint_name
 
     # Constraint: An instructor can only teach one class per timeslot
     instructors = set(cls.faculty1 for cls in class_sections)
@@ -682,7 +686,7 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
                 cls_1_slots = get_class_datetime_slots(cls.week_days, cls.csm_start)
                 time_diff = find_closest_slot(cls_1_slots, three_credit_slots[base_sec_name])
                 for tsl in available_timeslots:
-                    prob += move_penalty * time_diff * x[cls.sec_name, tsl]
+                    prob += global_settings['move_penalty'] * time_diff * x[cls.sec_name, tsl]
 
 
     # Solve the problem
@@ -714,21 +718,17 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
     return optimization_results
 
 
-def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
+def optimize_schedule(class_sections):
     linked_sections = []
+    meeting_times = create_meeting_times()
 
     # Helper function to get attribute or key value
     def get_value(item, key, default=None):
         return item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
 
     for class_section in class_sections:
-        sec_name = get_value(class_section, 'sec_name')
+        sec_name = get_value(class_section, 'section')
 
-        if sec_name.endswith("_ex"):
-            base_sec_name = sec_name[:-3]
-            corresponding_ex_section = next((cls for cls in class_sections if get_value(cls, 'sec_name') == base_sec_name), None)
-            if corresponding_ex_section:
-                linked_sections.append((corresponding_ex_section, class_section))
 
     instructors = set(get_value(cls, 'faculty1') for cls in class_sections)
     timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in meeting_times]
@@ -741,55 +741,61 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
 
 
     # Create a set of unique rooms
-    rooms = set(cls.room for cls in class_sections if cls.room.strip())
+    rooms = set(cls['room'] for cls in class_sections if cls['room'].strip())
 
     # Constraint: No two classes can be in the same room at the same timeslot
     for tsl in timeslots:
         for room in rooms:
-            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.room == room and (cls.sec_name, tsl) in x) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
+            prob += pulp.lpSum(x[cls['sec_name'], tsl] for cls in class_sections if cls['room'] == room and (cls['section'], tsl) in x) <= 1, f"OneClassPerRoomPerSlot_{room}_{tsl}"
 
     # Assuming 'instructors' is a list of all unique instructors
-    instructors = set(cls.faculty1 for cls in class_sections)
+    instructors = set(cls['faculty1'] for cls in class_sections)
 
 
     # Constraint: An instructor can only teach one class per timeslot
     for tsl in timeslots:
         for instructor in instructors:
-            prob += pulp.lpSum(x[cls.sec_name, tsl] for cls in class_sections if cls.faculty1 == instructor and (cls.sec_name, tsl) in x) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{tsl}"
+            prob += pulp.lpSum(x[cls['section'], tsl] for cls in class_sections if cls['faculty1'] == instructor and (cls['section'], tsl) in x) <= 1, f"OneClassPerInstructorPerSlot_{instructor}_{tsl}"
             
-   # Penalty for avoiding classes in the same timeslot
-    penalty = class_penalty  # Adjust the penalty weight as needed
-    constraint_counter = 0  # Initialize a countexr for constraint names
+    # Penalty for avoiding classes in the same timeslot
+    penalty = global_settings['class_penalty']  # Adjust the penalty weight as needed
+    constraint_counter = 0  # Initialize a counter for constraint names
     for cls in class_sections:
         for tsl in timeslots:
-            for other_cls_name in cls.avoid_classes:
-                if (other_cls_name, tsl) in x:
-                    constraint_counter += 1
-                    constraint_name = f"AvoidClassesPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
-                    prob += x[cls.sec_name, tsl] + x[other_cls_name, tsl] <= 1, constraint_name
+            # Check if 'restrictions' list is not empty
+            if cls['restrictions']:
+                for other_cls_name in cls['restrictions']:
+                    if (other_cls_name, tsl) in x:
+                        constraint_counter += 1
+                        constraint_name = f"AvoidClassesPenalty_{cls['sec_name']}_{tsl}_{constraint_counter}"
+                        prob += x[cls['sec_name'], tsl] + x[other_cls_name, tsl] <= 1, constraint_name
 
     
 
     # Penalty for avoiding timeslots
     constraint_counter = 0  # Initialize a counter for constraint names
-    #hold_penalty = hold_penalty # Adjust the penalty weight as needed
-    
+
     # Penalty for moving a class outside its known timeslot when holdValue is 1
     for cls in class_sections:
-        if cls.holdValue == 1:
+        # Check if the holdValue of the class section is 1
+        if cls.get('holdValue', 0) == 1:
             for tsl in timeslots:
-                if (cls.sec_name, tsl) not in x and int(tsl.split("_")[-1]) not in cls.assigned_meeting_time_indices:
-                    constraint_counter += hold_penalty
-                    constraint_name = f"MoveClassPenalty_{cls.sec_name}_{tsl}_{constraint_counter}"
-                    prob += x[cls.sec_name, tsl] == 0, constraint_name
+                # Check if the class is not scheduled in this timeslot and if the timeslot is not in the assigned meeting time indices
+                if (cls['sec_name'], tsl) not in x:
+                    tsl_index = int(tsl.split("_")[-1])
+                    if tsl_index not in cls.get('assigned_meeting_time_indices', []):
+                        constraint_counter += global_settings['hold_penalty']
+                        constraint_name = f"MoveClassPenalty_{cls['sec_name']}_{tsl}_{constraint_counter}"
+                        prob += x[cls['sec_name'], tsl] == 0, constraint_name
 
 
     # Additional penalty for blocked_time_slots
-    blocked_slot_penalty = blocked_slot_penalty  # Adjust the penalty weight as needed
     for cls in class_sections:
         for tsl in timeslots:
-            if tsl in cls.unwanted_timeslots:
-                prob += x[cls.sec_name, tsl] == 0, f"BlockedTimeSlotPenalty_{cls.sec_name}_{tsl}"
+            # Check if the timeslot is in the unwanted timeslots for the class section
+            if tsl in cls.get('unwanted_timeslots', []):
+                prob += global_settings['blocked_slot_penalty'] * x[cls['sec_name'], tsl], f"BlockedTimeSlotPenalty_{cls['sec_name']}_{tsl}"
+
 
     
     # Calculate the penalty for keeping linked sections together
@@ -797,7 +803,7 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     for cls_A, cls_B in linked_sections:
         for tsl in timeslots:
             # Calculate the absolute difference in indexes of cls_A and cls_B
-            index_diff = abs(class_sections.index(cls_A) - class_sections.index(cls_B)) * move_penalty
+            index_diff = abs(class_sections.index(cls_A) - class_sections.index(cls_B)) * global_settings['move_penalty']
             index_diff = int(index_diff)
             # Add the penalty to the objective function
             prob += x[cls_A.sec_name, tsl] + x[cls_B.sec_name, tsl] <= 1 + index_diff, f"LinkConstraint_{cls_A.sec_name}_{cls_B.sec_name}_{tsl}"
@@ -1094,7 +1100,7 @@ def extract_schedule_from_pulp_results(pulp_results):
     return extracted_schedule
 
 
-def custom_mutate(individual, full_meeting_times, mutpb,class_penalty=1, move_penalty=1, blocked_slot_penalty=1, hold_penalty=1):
+def custom_mutate(individual, full_meeting_times, mutpb):
     section_timeslots_map = {}
     for class_section in individual:
         section_name = class_section['section_name']
@@ -1265,41 +1271,39 @@ def custom_crossover(ind1, ind2):
 
 
 
-def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2,class_penalty=1, move_penalty=1, blocked_slot_penalty=1, hold_penalty=1):
-    creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-    creator.create("Individual", list, fitness=creator.FitnessMin)
+def run_genetic_algorithm(combined_expanded_schedule, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2):
+    # Create necessary data
+    full_meeting_times_data = create_full_meeting_times()
 
+    # Setup the DEAP toolbox
     toolbox = base.Toolbox()
-    toolbox.register("individual", create_individual, combined_expanded_schedule, full_meeting_times)
+    
+    # Register individual and population creation methods
+    toolbox.register("individual", create_individual, class_sections=combined_expanded_schedule, full_meeting_times=full_meeting_times_data)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    
-    
-    
 
-    # Adjusting the evaluate function to use only the total_score from evaluateSchedule's output
+    # Register custom mutate method
+    toolbox.register(
+        "mutate", 
+        custom_mutate, 
+        full_meeting_times=full_meeting_times_data, 
+        mutpb=0.3
+    )
+    # Register mate and select methods
+    toolbox.register("mate", custom_crossover)
+    toolbox.register("select", tools.selTournament, tournsize=3)
+
+    # Adjust the evaluate function to use only the total score from evaluateSchedule's output
     def evaluate_wrapper(individual):
         evaluation_results = evaluateSchedule(individual)
         return evaluation_results['total_score'],
 
     toolbox.register("evaluate", evaluate_wrapper)
-    #toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mate", custom_crossover)
-    toolbox.register("individual", create_individual, class_sections=combined_expanded_schedule, full_meeting_times=create_full_meeting_times())
-    toolbox.register("mutate", 
-    lambda individual: custom_mutate(
-        individual, 
-        mutpb=0.3,  
-        class_penalty=class_penalty, 
-        move_penalty=move_penalty, 
-        blocked_slot_penalty=blocked_slot_penalty, 
-        hold_penalty=hold_penalty
-        )
-    )
-    toolbox.register("select", tools.selTournament, tournsize=3)
 
+    # Create initial population
     population = toolbox.population(n=pop_size)
-    
-    # Evaluate the entire population's fitness
+
+    # Evaluate initial population's fitness
     fitnesses = list(map(toolbox.evaluate, population))
     for ind, fit in zip(population, fitnesses):
         ind.fitness.values = fit
@@ -1309,37 +1313,52 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     stats.register("avg", np.mean)
     stats.register("min", np.min)
     stats.register("max", np.max)
- 
-   # Running the algorithm
-    final_population = algorithms.eaSimple(population, toolbox, cxpb=cxpb, mutpb=mutpb, ngen=ngen, stats=stats, verbose=True)
 
-    # Sort the entire population based on fitness scores (ascending order)
+    # Run genetic algorithm
+    final_population, logbook = algorithms.eaSimple(population, toolbox, cxpb, mutpb, ngen, stats=stats, verbose=True)
+
+    # Process final population
     sorted_population = sorted(population, key=lambda ind: ind.fitness.values[0])
 
-    # Initialize an empty list for top unique schedules
+    # Identify top unique schedules
     top_unique_schedules = []
-
-    # Set to store used scores for uniqueness
     used_scores = set()
-
-    # Iterate over the sorted population
     for ind in sorted_population:
         fitness_score = ind.fitness.values[0]
-
-        # Check if the score is unique
         if fitness_score not in used_scores:
-            # Add the individual and its score to the top unique schedules
             top_unique_schedules.append((ind, fitness_score))
-            # Add the score to the used scores set
             used_scores.add(fitness_score)
+            if len(top_unique_schedules) == 5:
+                break
 
-        # Stop if we have collected 5 unique schedules
-        if len(top_unique_schedules) == 5:
-            break
-
-    # Return the top unique schedules
     return top_unique_schedules
 
+def split_class_sections():
+    three_credit_sections = []
+    remaining_class_sections = []
+    class_sections = global_settings['class_sections_data']
+
+    for class_section in class_sections:
+        if int(class_section['minCredit']) == 4:
+            # Create a copy of the class_section dictionary
+            three_credit_section = class_section.copy()
+            three_credit_section['minCredit'] = '3'
+
+            # Create a modified copy for the one credit section
+            one_credit_section = class_section.copy()
+            one_credit_section['minCredit'] = '1'
+            one_credit_section['section'] += "_one_credit"
+
+            three_credit_sections.append(three_credit_section)
+            remaining_class_sections.append(one_credit_section)
+
+        elif int(class_section['minCredit']) == 3:
+            three_credit_sections.append(class_section.copy())
+
+        else:
+            remaining_class_sections.append(class_section.copy())
+
+    return three_credit_sections, remaining_class_sections
 
 
 def count_slot_differences(pulp_schedule, ga_schedule):
@@ -1355,53 +1374,51 @@ def count_slot_differences(pulp_schedule, ga_schedule):
 
 @app.route('/optimize', methods=['POST'])
 def optimize():
+    
+    global global_settings
     data = request.get_json()
+    
+    global_settings['class_sections_data'] = data.get('classData', [])
+    global_settings['class_penalty'] = data.get('classPenalty', 0)
+    global_settings['move_penalty'] = data.get('movePenalty', 0)
+    global_settings['blocked_slot_penalty'] = data.get('blockedSlotPenalty', 0)
+    global_settings['hold_penalty'] = data.get('holdPenalty', 0)
 
-    class_sections_data = data.get('classData', [])
-    class_penalty = data.get('classPenalty', 0)
-    move_penalty = data.get('movePenalty', 0)
-    blocked_slot_penalty = data.get('blockedSlotPenalty', 0)
-    hold_penalty = data.get('holdPenalty', 0)
 
-    class_sections = create_class_sections_from_data(class_sections_data)
 
-    three_credit_sections = []
-    remaining_class_sections = []
-    for class_section in class_sections:
-        if int(class_section.min_credit) == 4:
-            three_credit_section = class_section.copy()
-            three_credit_section.min_credit = '3'
-            one_credit_section = class_section.copy()
-            one_credit_section.min_credit = '1'
-            one_credit_section.sec_name += "_one_credit"
-            three_credit_sections.append(three_credit_section)
-            remaining_class_sections.append(one_credit_section)
-        elif int(class_section.min_credit) == 3:
-            three_credit_sections.append(class_section)
-        else:
-            remaining_class_sections.append(class_section)
+    class_sections = create_class_sections_from_data(global_settings['class_sections_data'])
+    
+    # Convert class section instances to dictionaries
+    class_sections_dictionaries = [class_section.to_dictionary() for class_section in class_sections]
 
-    meeting_times = create_meeting_times()
+    three_credit_sections, remaining_class_sections =  split_class_sections()
 
-    three_credit_results = optimize_schedule(three_credit_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    # Optimize the 3-credit classes with Pulp
+    three_credit_results = optimize_schedule(three_credit_sections)
 
+    # Create a set of used timeslots
     used_timeslots = set()
     for section in three_credit_results['scheduled_sections']:
         used_timeslots.add(section['timeslot'])
-
+        
+    # Calculate remaining timeslots
     all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
     remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
 
-    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, used_timeslots, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
-
+    # Optimize the remaining classes with Pulp
+    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, used_timeslots)
     calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
 
+    # Combine and expand the schedules
     combined_expanded_schedule = combine_and_expand_schedule(three_credit_results, remaining_class_results, create_full_meeting_times(), class_sections)
 
+    # use the genetic algorithm evalutaion function to evaluate the schedule
     pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
     pulp_score = pulp_evaluation_results['total_score']
+    full_meeting_times_data = create_full_meeting_times()
 
-    ga_schedules = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.3,class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    # Run the genetic algorithm to optimize the schedule further
+    ga_schedules = run_genetic_algorithm(combined_expanded_schedule)
 
     all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA', 'slot_differences': count_slot_differences(combined_expanded_schedule, schedule)} for schedule, score in ga_schedules]
     all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
