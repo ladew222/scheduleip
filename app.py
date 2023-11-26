@@ -715,48 +715,29 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
 
 
 def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
-    
-        
-    
     linked_sections = []
 
+    # Helper function to get attribute or key value
+    def get_value(item, key, default=None):
+        return item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
+
     for class_section in class_sections:
-        sec_name = class_section.sec_name
+        sec_name = get_value(class_section, 'sec_name')
 
-        # Check if the section name ends with "_ex"
         if sec_name.endswith("_ex"):
-            # Extract the base section name (without "_ex")
             base_sec_name = sec_name[:-3]
-
-            # Find the corresponding "_ex" section, if it exists
-            corresponding_ex_section = next((cls for cls in class_sections if cls.sec_name == base_sec_name), None)
-
+            corresponding_ex_section = next((cls for cls in class_sections if get_value(cls, 'sec_name') == base_sec_name), None)
             if corresponding_ex_section:
                 linked_sections.append((corresponding_ex_section, class_section))
-        
-    
-    
-    instructors = set(cls.faculty1 for cls in class_sections)
-    # Create a LP problem instance
-    timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in meeting_times]
-    
-    # Create a LP problem instance
-    prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize) 
-    
-    
-    # Create binary variables: x_ij = 1 if class i is in timeslot j 
-    x = pulp.LpVariable.dicts("x", 
-                            ((cls.sec_name, tsl) for cls in class_sections for tsl in timeslots),
-                            cat='Binary')
 
-    # Objective function: Minimize the total number of scheduled classes
-    prob += pulp.lpSum(x[cls.sec_name,tsl] for cls in class_sections for tsl in timeslots)
-    
-    
-     # Constraint: Each class must take exactly one timeslot
-    for cls in class_sections:
-        unique_constraint_name = f"OneClassOneSlotConstraint_{cls.sec_name}"  # Generate a unique constraint name
-        prob += pulp.lpSum(x[cls.sec_name, tsl] for tsl in timeslots if (cls.sec_name, tsl) in x) == 1, unique_constraint_name
+    instructors = set(get_value(cls, 'faculty1') for cls in class_sections)
+    timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in meeting_times]
+
+    prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize) 
+    x = pulp.LpVariable.dicts("x", ((get_value(cls, 'sec_name'), tsl) for cls in class_sections for tsl in timeslots), cat='Binary')
+
+    prob += pulp.lpSum(x[get_value(cls, 'sec_name'), tsl] for cls in class_sections for tsl in timeslots)
+
 
 
     # Create a set of unique rooms
@@ -828,37 +809,27 @@ def optimize_schedule(class_sections, meeting_times, class_penalty, move_penalty
     # Solve the problem
     prob.solve()
 
-
     # Create a list to store the scheduled class sections
     scheduled_sections = []
-
-    # Output the results and store scheduled sections
     for cls in class_sections:
         for tsl in timeslots:
-            if pulp.value(x[cls.sec_name, tsl]) == 1:
+            if pulp.value(x[get_value(cls, 'sec_name'), tsl]) == 1:
                 scheduled_sections.append({
-                    'section_name': cls.sec_name,
+                    'section_name': get_value(cls, 'sec_name'),
                     'timeslot': tsl,
-                    'instructor': cls.faculty1,
-                    'room': cls.room,
-                    'sec_cap' : cls.sec_cap,
-                    'bldg': cls.bldg,
-                    
+                    'instructor': get_value(cls, 'faculty1'),
+                    'room': get_value(cls, 'room'),
+                    'sec_cap': get_value(cls, 'sec_cap', 'Unknown'),
+                    'bldg': get_value(cls, 'bldg', 'Unknown'),
                 })
 
     # Create a dictionary to store optimization results
     optimization_results = {
         'message': 'Optimization complete',
         'scheduled_sections': scheduled_sections,
+        'status': 'Success' if prob.status == pulp.LpStatusOptimal else 'Failure'
     }
 
-    # Check if optimization was successful
-    if prob.status == pulp.LpStatusOptimal:
-        optimization_results['status'] = 'Success'
-    else:
-        optimization_results['status'] = 'Optimization failed'
-
-    # Return the optimization results
     return optimization_results
 
 
@@ -1057,7 +1028,7 @@ def merge_schedules(schedule_1, schedule_2):
     return merged_schedule
 
 
-def repair_schedule(individual):
+def repair_schedule(individual, class_penalty, move_penalty, blocked_slot_penalty, hold_penalty):
     # Divide the schedule into 3-credit and other classes
     three_credit_classes, other_classes = divide_schedules_by_credit(individual)
 
@@ -1066,10 +1037,28 @@ def repair_schedule(individual):
     formatted_other_classes = format_for_pulp(other_classes)
 
     # Optimize the 3-credit classes with Pulp
-    optimized_three_credit_results = optimize_schedule(formatted_three_credit_classes, ...)
+    optimized_three_credit_results = optimize_schedule(formatted_three_credit_classes, create_meeting_times(), class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
+    
+    # Create used_timeslots based on the optimized 3-credit class results
+    used_timeslots = set()
+    for section in optimized_three_credit_results['scheduled_sections']:
+        used_timeslots.add(section['timeslot'])
+
+    # Calculate remaining timeslots
+    all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
+    remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
 
     # Optimize the remaining classes with Pulp
-    optimized_other_classes_results = optimize_remaining_classes(formatted_other_classes, ...)
+    optimized_other_classes_results = optimize_remaining_classes(
+        formatted_other_classes, 
+        remaining_timeslots, 
+        used_timeslots, 
+        class_penalty, 
+        move_penalty, 
+        blocked_slot_penalty, 
+        hold_penalty
+    )
+
 
     # Extract the optimized schedules from the Pulp results
     optimized_three_credit_classes = extract_schedule_from_pulp_results(optimized_three_credit_results)
@@ -1105,7 +1094,7 @@ def extract_schedule_from_pulp_results(pulp_results):
     return extracted_schedule
 
 
-def custom_mutate(individual, full_meeting_times, mutpb):
+def custom_mutate(individual, full_meeting_times, mutpb,class_penalty=1, move_penalty=1, blocked_slot_penalty=1, hold_penalty=1):
     section_timeslots_map = {}
     for class_section in individual:
         section_name = class_section['section_name']
@@ -1154,8 +1143,15 @@ def custom_mutate(individual, full_meeting_times, mutpb):
                     new_timeslot = random.choice(same_day_timeslots)
                     class_section['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
                     
+
     # After mutation, repair the individual
-    repaired_individual = repair_schedule(individual)
+    repaired_individual = repair_schedule(
+        individual, 
+        class_penalty, 
+        move_penalty, 
+        blocked_slot_penalty, 
+        hold_penalty
+    )
     # Update the individual with the repaired schedule
     individual[:] = repaired_individual
 
@@ -1269,13 +1265,16 @@ def custom_crossover(ind1, ind2):
 
 
 
-def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2):
+def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2,class_penalty=1, move_penalty=1, blocked_slot_penalty=1, hold_penalty=1):
     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMin)
 
     toolbox = base.Toolbox()
     toolbox.register("individual", create_individual, combined_expanded_schedule, full_meeting_times)
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+    
+    
+    
 
     # Adjusting the evaluate function to use only the total_score from evaluateSchedule's output
     def evaluate_wrapper(individual):
@@ -1286,7 +1285,16 @@ def run_genetic_algorithm(combined_expanded_schedule, full_meeting_times, ngen=1
     #toolbox.register("mate", tools.cxTwoPoint)
     toolbox.register("mate", custom_crossover)
     toolbox.register("individual", create_individual, class_sections=combined_expanded_schedule, full_meeting_times=create_full_meeting_times())
-    toolbox.register("mutate", custom_mutate, full_meeting_times=create_full_meeting_times(), mutpb=0.3)
+    toolbox.register("mutate", 
+    lambda individual: custom_mutate(
+        individual, 
+        mutpb=0.3,  
+        class_penalty=class_penalty, 
+        move_penalty=move_penalty, 
+        blocked_slot_penalty=blocked_slot_penalty, 
+        hold_penalty=hold_penalty
+        )
+    )
     toolbox.register("select", tools.selTournament, tournsize=3)
 
     population = toolbox.population(n=pop_size)
@@ -1393,7 +1401,7 @@ def optimize():
     pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
     pulp_score = pulp_evaluation_results['total_score']
 
-    ga_schedules = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.3)
+    ga_schedules = run_genetic_algorithm(combined_expanded_schedule, create_full_meeting_times(), ngen=100, pop_size=50, cxpb=0.5, mutpb=0.3,class_penalty, move_penalty, blocked_slot_penalty, hold_penalty)
 
     all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA', 'slot_differences': count_slot_differences(combined_expanded_schedule, schedule)} for schedule, score in ga_schedules]
     all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
