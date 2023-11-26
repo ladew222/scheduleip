@@ -542,6 +542,29 @@ def read_csv_and_create_class_sections(csv_filename):
 
     return class_sections
 
+def divide_schedules_by_credit(schedule, credit_threshold=3):
+    """
+    Divide the schedule into two groups based on credit hours.
+
+    Args:
+        schedule (list): The list of scheduled classes.
+        credit_threshold (int): The threshold for dividing classes by credit.
+
+    Returns:
+        tuple: Two lists, one for classes with credits greater than or equal to the threshold, and one for the rest.
+    """
+    three_credit_classes = []
+    remaining_classes = []
+
+    for class_section in schedule:
+        if int(class_section['min_credit']) >= credit_threshold:
+            three_credit_classes.append(class_section)
+        else:
+            remaining_classes.append(class_section)
+
+    return three_credit_classes, remaining_classes
+
+
 # Function to get all datetime slots for a class based on its week days and start time
 def get_class_datetime_slots(week_days, start_time_str):
     start_time = datetime.strptime(start_time_str, '%I:%M%p').time()
@@ -980,6 +1003,30 @@ def combine_and_expand_schedule(three_credit_results, remaining_class_results, m
     return combined_schedule
 
 
+def format_for_pulp(schedule):
+    formatted_schedule = []
+
+    for class_section in schedule:
+        formatted_class = {
+            'sec_name': class_section['section_name'],
+            'timeslot': class_section['timeslot'],
+            'faculty1': class_section['instructor'],
+            'room': class_section.get('room', 'Unknown'),
+            'sec_cap': class_section.get('sec_cap', 'Unknown'),
+            'bldg': class_section.get('bldg', 'Unknown'),
+            'avoid_classes': class_section.get('avoid_classes', []),
+            'unwanted_timeslots': class_section.get('unwanted_timeslots', []),
+            'holdValue': class_section.get('holdValue', 0)
+        }
+
+        # Additional attributes might be needed depending on your Pulp functions
+        # For example, if min_credit or week_days are needed, add them here.
+
+        formatted_schedule.append(formatted_class)
+
+    return formatted_schedule
+
+
 def expand_three_credit_class(class_result, meeting_times, class_section):
     # Logic to expand a three-credit class into individual time slots
     expanded_slots = []
@@ -998,7 +1045,65 @@ def expand_three_credit_class(class_result, meeting_times, class_section):
 
 import random
 
-import random
+def merge_schedules(schedule_1, schedule_2):
+    merged_schedule = schedule_1.copy()  # Start with a copy of the first schedule
+
+    # Iterate over the second schedule and add unique sections
+    for section_2 in schedule_2:
+        if section_2 not in merged_schedule:
+            # Add the section from schedule_2 if it's not already in merged_schedule
+            merged_schedule.append(section_2)
+
+    return merged_schedule
+
+
+def repair_schedule(individual):
+    # Divide the schedule into 3-credit and other classes
+    three_credit_classes, other_classes = divide_schedules_by_credit(individual)
+
+    # Format the schedules for Pulp optimization
+    formatted_three_credit_classes = format_for_pulp(three_credit_classes)
+    formatted_other_classes = format_for_pulp(other_classes)
+
+    # Optimize the 3-credit classes with Pulp
+    optimized_three_credit_results = optimize_schedule(formatted_three_credit_classes, ...)
+
+    # Optimize the remaining classes with Pulp
+    optimized_other_classes_results = optimize_remaining_classes(formatted_other_classes, ...)
+
+    # Extract the optimized schedules from the Pulp results
+    optimized_three_credit_classes = extract_schedule_from_pulp_results(optimized_three_credit_results)
+    optimized_other_classes = extract_schedule_from_pulp_results(optimized_other_classes_results)
+
+    # Merge the optimized schedules back into one
+    repaired_individual = merge_schedules(optimized_three_credit_classes, optimized_other_classes)
+
+    return repaired_individual
+
+# Implement the additional helper functions as needed
+
+def extract_schedule_from_pulp_results(pulp_results):
+    extracted_schedule = []
+
+    # Check if optimization was successful
+    if pulp_results.get('status') == 'Success':
+        scheduled_sections = pulp_results.get('scheduled_sections', [])
+
+        for scheduled_section in scheduled_sections:
+            # Extract and format each scheduled section
+            formatted_section = {
+                'section_name': scheduled_section.get('section_name'),
+                'timeslot': scheduled_section.get('timeslot'),
+                'instructor': scheduled_section.get('instructor'),
+                'room': scheduled_section.get('room'),
+                'sec_cap': scheduled_section.get('sec_cap', 'Unknown'),
+                'bldg': scheduled_section.get('bldg', 'Unknown'),
+                # Include any other relevant attributes you need from the Pulp results
+            }
+            extracted_schedule.append(formatted_section)
+
+    return extracted_schedule
+
 
 def custom_mutate(individual, full_meeting_times, mutpb):
     section_timeslots_map = {}
@@ -1048,9 +1153,35 @@ def custom_mutate(individual, full_meeting_times, mutpb):
                 if same_day_timeslots:
                     new_timeslot = random.choice(same_day_timeslots)
                     class_section['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
+                    
+    # After mutation, repair the individual
+    repaired_individual = repair_schedule(individual)
+    # Update the individual with the repaired schedule
+    individual[:] = repaired_individual
 
     return individual,
 
+def extract_schedule_from_pulp_results(pulp_results):
+    extracted_schedule = []
+
+    # Check if optimization was successful
+    if pulp_results.get('status') == 'Success':
+        scheduled_sections = pulp_results.get('scheduled_sections', [])
+
+        for scheduled_section in scheduled_sections:
+            # Extract and format each scheduled section
+            formatted_section = {
+                'section_name': scheduled_section.get('section_name'),
+                'timeslot': scheduled_section.get('timeslot'),
+                'instructor': scheduled_section.get('instructor'),
+                'room': scheduled_section.get('room'),
+                'sec_cap': scheduled_section.get('sec_cap', 'Unknown'),
+                'bldg': scheduled_section.get('bldg', 'Unknown'),
+                # Include any other relevant attributes you need from the Pulp results
+            }
+            extracted_schedule.append(formatted_section)
+
+    return extracted_schedule
 
 
 
