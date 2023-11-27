@@ -1193,43 +1193,43 @@ def custom_mutate(individual, full_meeting_times, mutpb):
             minCredit = int(class_section['minCredit'])
             section_name = class_section['section']
 
-            pattern_timeslots = []
-            mwf_timeslots = []
-            tuth_timeslots = []
-
             if minCredit >= 3:
                 all_timeslots = section_timeslots_map[section_name]
-                is_mwf = all(['M' in ts['timeslot'] and 'W' in ts['timeslot'] and 'F' in ts['timeslot'] for ts in all_timeslots])
-                is_tuth = all(['Tu' in ts['timeslot'] and 'Th' in ts['timeslot'] for ts in all_timeslots])
+                is_mwf = all('M' in ts['timeslot'] and 'W' in ts['timeslot'] and 'F' in ts['timeslot'] for ts in all_timeslots)
+                is_tuth = all('Tu' in ts['timeslot'] and 'Th' in ts['timeslot'] for ts in all_timeslots)
 
                 if random.random() < 0.5:  # Change timeslot within the same pattern
-                    if is_mwf:
-                        pattern_timeslots = [ts for ts in full_meeting_times if 'M' in ts['days'] and 'W' in ts['days'] and 'F' in ts['days']]
-                    elif is_tuth:
-                        pattern_timeslots = [ts for ts in full_meeting_times if 'Tu' in ts['days'] and 'Th' in ts['days']]
+                    # Keep the pattern, select available timeslots within the same pattern
+                    pattern_timeslots = [ts for ts in full_meeting_times if ('M' in ts['days'] and is_mwf) or ('Tu' in ts['days'] and is_tuth)]
 
                     if pattern_timeslots:
                         new_timeslot = random.choice(pattern_timeslots)
                         for ts in all_timeslots:
                             ts['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
                 else:  # Switch pattern
+                    # Switch to the other pattern and adjust the number of timeslots
                     if is_mwf:
                         tuth_timeslots = [ts for ts in full_meeting_times if 'Tu' in ts['days'] and 'Th' in ts['days']]
+                        if tuth_timeslots:
+                            # Choose two new timeslots for TuTh pattern
+                            new_timeslots = random.sample(tuth_timeslots, 2)
+                            for j, ts in enumerate(all_timeslots):
+                                if j < len(new_timeslots):
+                                    ts['timeslot'] = f"{new_timeslots[j]['days']} - {new_timeslots[j]['start_time']}"
                     elif is_tuth:
                         mwf_timeslots = [ts for ts in full_meeting_times if 'M' in ts['days'] and 'W' in ts['days'] and 'F' in ts['days']]
+                        if mwf_timeslots:
+                            # Choose three new timeslots for MWF pattern
+                            new_timeslots = random.sample(mwf_timeslots, 3)
+                            for j, ts in enumerate(all_timeslots):
+                                ts['timeslot'] = f"{new_timeslots[j % 3]['days']} - {new_timeslots[j % 3]['start_time']}"
 
-                    if (is_mwf and tuth_timeslots) or (is_tuth and mwf_timeslots):
-                        new_timeslot = random.choice(tuth_timeslots if is_mwf else mwf_timeslots)
-                        for ts in all_timeslots:
-                            ts['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
-
-            else:
+            else:  # For one-credit classes and extra credit slots from 4-credit classes
                 current_day = class_section['timeslot'].split(' - ')[0]
                 same_day_timeslots = [ts for ts in full_meeting_times if current_day in ts['days']]
                 if same_day_timeslots:
                     new_timeslot = random.choice(same_day_timeslots)
                     class_section['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
-                    
 
     # After mutation, repair the individual
     #repaired_individual = repair_schedule(individual)
@@ -1237,6 +1237,7 @@ def custom_mutate(individual, full_meeting_times, mutpb):
     #individual[:] = repaired_individual
 
     return individual,
+
 
 def extract_schedule_from_pulp_results(pulp_results):
     extracted_schedule = []
@@ -1416,7 +1417,7 @@ def run_genetic_algorithm(combined_expanded_schedule, ngen=100, pop_size=50, cxp
     return top_unique_schedules
 
 def split_class_sections(class_sections):
-    three_credit_sections = []
+    three_credit_sections = 
     remaining_class_sections = []
     #class_sections = global_settings['class_sections_data']
 
