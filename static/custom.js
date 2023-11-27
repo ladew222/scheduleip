@@ -91,7 +91,7 @@ function createResultsTable(data) {
     table += '<tr style="background-color: #f4f4f4;"><th>Section Name</th><th>Instructor</th><th>Timeslot</th></tr>';
 
     data.schedule.forEach(item => {
-        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section_name}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.instructor}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td></tr>`;
+        table += `<tr><td style="border: 1px solid #ddd; padding: 8px;">${item.section}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.instructor}</td><td style="border: 1px solid #ddd; padding: 8px;">${item.timeslot}</td></tr>`;
     });
 
     table += '</table>';

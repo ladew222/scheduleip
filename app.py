@@ -16,6 +16,8 @@ from deap import base, creator, tools, algorithms
 import random
 import numpy as np
 import random
+from datetime import datetime, timedelta
+from collections import Counter
 
 # Define the problem class
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
@@ -545,50 +547,52 @@ def read_csv_and_create_class_sections(csv_filename):
 
 
 def divide_schedules_by_credit(schedule, credit_threshold=3):
-    """
-    Divide the schedule into two groups based on credit hours and time patterns.
-
-    Args:
-        schedule (list): The list of scheduled classes.
-        credit_threshold (int): The threshold for dividing classes by credit.
-
-    Returns:
-        tuple: Two lists, one for classes with credits greater than or equal to the threshold, and one for the rest.
-    """
     three_credit_classes = []
     remaining_classes = []
     section_groupings = {}
 
-    # Group classes by their base section name
     for class_section in schedule:
-        base_section_name = class_section['section_name'].split('_')[0]
+        base_section_name = class_section['section'].split('_')[0]
         section_groupings.setdefault(base_section_name, []).append(class_section)
 
-    # Process each group to form 3-credit or remaining classes
     for base_section_name, sections in section_groupings.items():
-        if any(int(cls['min_credit']) >= credit_threshold for cls in sections):
-            # Determine the most common start times for TuTh and MWF patterns
-            mwf_times, tuth_times = get_most_common_start_times(sections)
-
-            # Form the 3-credit class pattern
-            three_credit_class = form_three_credit_pattern(sections, mwf_times, tuth_times, credit_threshold)
-
-            three_credit_classes.extend(three_credit_class['patterned_classes'])
-            remaining_classes.extend(three_credit_class['remaining_classes'])
+        if any(int(cls['minCredit']) >= credit_threshold for cls in sections):
+            mwf_time, tuth_time = get_most_common_start_times(sections)
+            if mwf_time:
+                mwf_sections = [cls for cls in sections if 'M' in cls['timeslot'] or 'W' in cls['timeslot'] or 'F' in cls['timeslot']]
+                if mwf_sections:
+                    three_credit_classes.append({
+                        'section_name': base_section_name,
+                        'timeslot': 'M W F - ' + mwf_time,
+                        'min_credit': mwf_sections[0]['minCredit']
+                    })
+            if tuth_time:
+                tuth_sections = [cls for cls in sections if 'Tu' in cls['timeslot'] or 'Th' in cls['timeslot']]
+                if tuth_sections:
+                    three_credit_classes.append({
+                        'section_name': base_section_name,
+                        'timeslot': 'Tu Th - ' + tuth_time,
+                        'min_credit': tuth_sections[0]['minCredit']
+                    })
         else:
-            # All sections are less than the credit threshold
             remaining_classes.extend(sections)
 
     return three_credit_classes, remaining_classes
 
-def get_most_common_start_times(sections):
-    mwf_start_times = [cls['timeslot'].split(' - ')[1] for cls in sections if 'M' in cls['timeslot'] and 'W' in cls['timeslot'] and 'F' in cls['timeslot']]
-    tuth_start_times = [cls['timeslot'].split(' - ')[1] for cls in sections if 'Tu' in cls['timeslot'] and 'Th' in cls['timeslot']]
 
-    most_common_mwf_time = max(set(mwf_start_times), key=mwf_start_times.count) if mwf_start_times else None
-    most_common_tuth_time = max(set(tuth_start_times), key=tuth_start_times.count) if tuth_start_times else None
+    return three_credit_classes, remaining_classes
+
+def get_most_common_start_times(sections):
+    # Separate MWF and TuTh timeslots
+    mwf_start_times = [cls['timeslot'].split(' - ')[1] for cls in sections if 'M' in cls['timeslot'] or 'W' in cls['timeslot'] or 'F' in cls['timeslot']]
+    tuth_start_times = [cls['timeslot'].split(' - ')[1] for cls in sections if 'Tu' in cls['timeslot'] or 'Th' in cls['timeslot']]
+
+    # Find the most common start times
+    most_common_mwf_time = Counter(mwf_start_times).most_common(1)[0][0] if mwf_start_times else None
+    most_common_tuth_time = Counter(tuth_start_times).most_common(1)[0][0] if tuth_start_times else None
 
     return most_common_mwf_time, most_common_tuth_time
+
 
 def form_three_credit_pattern(sections, mwf_time, tuth_time, credit_threshold):
     patterned_classes = []
@@ -596,7 +600,7 @@ def form_three_credit_pattern(sections, mwf_time, tuth_time, credit_threshold):
     mwf_count = tuth_count = 0
 
     for cls in sections:
-        if cls['min_credit'] == '4' and len(patterned_classes) < 3:
+        if cls['minCredit'] == '4' and len(patterned_classes) < 3:
             # Prioritize filling the pattern for 4-credit classes
             if 'M' in cls['timeslot'] and 'W' in cls['timeslot'] and 'F' in cls['timeslot'] and (mwf_time is None or cls['timeslot'].endswith(mwf_time)):
                 patterned_classes.append(cls)
@@ -606,7 +610,7 @@ def form_three_credit_pattern(sections, mwf_time, tuth_time, credit_threshold):
                 tuth_count += 1
             else:
                 remaining_classes.append(cls)
-        elif int(cls['min_credit']) >= credit_threshold:
+        elif int(cls['minCredit']) >= credit_threshold:
             # Fill in the pattern for 3-credit classes
             if (mwf_count < 3 and 'M' in cls['timeslot'] and 'W' in cls['timeslot'] and 'F' in cls['timeslot']) or (tuth_count < 2 and 'Tu' in cls['timeslot'] and 'Th' in cls['timeslot']):
                 patterned_classes.append(cls)
@@ -941,7 +945,7 @@ def process_calendar_data_expanded(expanded_schedule):
     weekday_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
 
     for result in expanded_schedule:
-        section_name = result['section_name']
+        section_name = result['section']
         timeslot = result['timeslot']
         day, start_time = timeslot.split(' - ')
         
@@ -1228,9 +1232,9 @@ def custom_mutate(individual, full_meeting_times, mutpb):
                     
 
     # After mutation, repair the individual
-    repaired_individual = repair_schedule(individual)
+    #repaired_individual = repair_schedule(individual)
     # Update the individual with the repaired schedule
-    individual[:] = repaired_individual
+    #individual[:] = repaired_individual
 
     return individual,
 
@@ -1388,8 +1392,11 @@ def run_genetic_algorithm(combined_expanded_schedule, ngen=100, pop_size=50, cxp
     # Run genetic algorithm
     final_population, logbook = algorithms.eaSimple(population, toolbox, cxpb, mutpb, ngen, stats=stats, verbose=True)
 
+
     # Process final population
     sorted_population = sorted(population, key=lambda ind: ind.fitness.values[0])
+    
+   
 
     # Identify top unique schedules
     top_unique_schedules = []
@@ -1402,6 +1409,10 @@ def run_genetic_algorithm(combined_expanded_schedule, ngen=100, pop_size=50, cxp
             if len(top_unique_schedules) == 5:
                 break
 
+    
+     # take the top ga solution and split back into 3 and 1 credit classes and rerurn pulp 
+    three_credit_classes, remaining_classes= divide_schedules_by_credit(top_unique_schedules[0][0])
+    
     return top_unique_schedules
 
 def split_class_sections(class_sections):
@@ -1434,10 +1445,10 @@ def split_class_sections(class_sections):
 
 def count_slot_differences(pulp_schedule, ga_schedule):
     differences = 0
-    pulp_sections = {section['section_name']: section['timeslot'] for section in pulp_schedule}
+    pulp_sections = {section['section']: section['timeslot'] for section in pulp_schedule}
     
     for section in ga_schedule:
-        section_name = section['section_name']
+        section_name = section['section']
         if pulp_sections.get(section_name) != section['timeslot']:
             differences += 1
 
