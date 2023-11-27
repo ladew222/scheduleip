@@ -68,7 +68,7 @@ def create_individual(combined_expanded_schedule, full_meeting_times, mutation_r
     for cls in combined_expanded_schedule:
         # Copy class section details
         new_class_section = cls.copy()
-        course_identifier = cls['section_name'].split('_')[0]
+        course_identifier = cls['section'].split('_')[0]
 
         # Randomly decide whether to mutate this class section
         if random.random() < mutation_rate:
@@ -361,10 +361,10 @@ def create_full_meeting_times():
 
     
 class ClassSection:
-    def __init__(self, sec_name, title, min_credit, sec_cap, room, bldg, week_days, csm_start, csm_end, faculty1, holdValue=None, restrictions=None, blocked_time_slots=None, assigned_meeting_time_indices=None):
+    def __init__(self, sec_name, title, minCredit, sec_cap, room, bldg, week_days, csm_start, csm_end, faculty1, holdValue=None, restrictions=None, blocked_time_slots=None, assigned_meeting_time_indices=None):
         self.section = sec_name
         self.title = title
-        self.minCredit = min_credit
+        self.minCredit = minCredit
         self.secCap = sec_cap
         self.room = room
         self.bldg = bldg
@@ -455,8 +455,8 @@ class ClassSection:
         return ClassSection(
             section=self.section,
             title=self.title,
-            min_credit=self.min_credit,
-            sec_cap=self.sec_cap,
+            minCredit=self.minCredit,
+            secCap=self.secCap,
             room=self.room,
             bldg=self.bldg,
             week_days=self.week_days,
@@ -543,9 +543,10 @@ def read_csv_and_create_class_sections(csv_filename):
 
     return class_sections
 
+
 def divide_schedules_by_credit(schedule, credit_threshold=3):
     """
-    Divide the schedule into two groups based on credit hours.
+    Divide the schedule into two groups based on credit hours and time patterns.
 
     Args:
         schedule (list): The list of scheduled classes.
@@ -556,14 +557,74 @@ def divide_schedules_by_credit(schedule, credit_threshold=3):
     """
     three_credit_classes = []
     remaining_classes = []
+    section_groupings = {}
 
+    # Group classes by their base section name
     for class_section in schedule:
-        if int(class_section['min_credit']) >= credit_threshold:
-            three_credit_classes.append(class_section)
+        base_section_name = class_section['section_name'].split('_')[0]
+        section_groupings.setdefault(base_section_name, []).append(class_section)
+
+    # Process each group to form 3-credit or remaining classes
+    for base_section_name, sections in section_groupings.items():
+        if any(int(cls['min_credit']) >= credit_threshold for cls in sections):
+            # Determine the most common start times for TuTh and MWF patterns
+            mwf_times, tuth_times = get_most_common_start_times(sections)
+
+            # Form the 3-credit class pattern
+            three_credit_class = form_three_credit_pattern(sections, mwf_times, tuth_times, credit_threshold)
+
+            three_credit_classes.extend(three_credit_class['patterned_classes'])
+            remaining_classes.extend(three_credit_class['remaining_classes'])
         else:
-            remaining_classes.append(class_section)
+            # All sections are less than the credit threshold
+            remaining_classes.extend(sections)
 
     return three_credit_classes, remaining_classes
+
+def get_most_common_start_times(sections):
+    mwf_start_times = [cls['timeslot'].split(' - ')[1] for cls in sections if 'M' in cls['timeslot'] and 'W' in cls['timeslot'] and 'F' in cls['timeslot']]
+    tuth_start_times = [cls['timeslot'].split(' - ')[1] for cls in sections if 'Tu' in cls['timeslot'] and 'Th' in cls['timeslot']]
+
+    most_common_mwf_time = max(set(mwf_start_times), key=mwf_start_times.count) if mwf_start_times else None
+    most_common_tuth_time = max(set(tuth_start_times), key=tuth_start_times.count) if tuth_start_times else None
+
+    return most_common_mwf_time, most_common_tuth_time
+
+def form_three_credit_pattern(sections, mwf_time, tuth_time, credit_threshold):
+    patterned_classes = []
+    remaining_classes = []
+    mwf_count = tuth_count = 0
+
+    for cls in sections:
+        if cls['min_credit'] == '4' and len(patterned_classes) < 3:
+            # Prioritize filling the pattern for 4-credit classes
+            if 'M' in cls['timeslot'] and 'W' in cls['timeslot'] and 'F' in cls['timeslot'] and (mwf_time is None or cls['timeslot'].endswith(mwf_time)):
+                patterned_classes.append(cls)
+                mwf_count += 1
+            elif 'Tu' in cls['timeslot'] and 'Th' in cls['timeslot'] and (tuth_time is None or cls['timeslot'].endswith(tuth_time)):
+                patterned_classes.append(cls)
+                tuth_count += 1
+            else:
+                remaining_classes.append(cls)
+        elif int(cls['min_credit']) >= credit_threshold:
+            # Fill in the pattern for 3-credit classes
+            if (mwf_count < 3 and 'M' in cls['timeslot'] and 'W' in cls['timeslot'] and 'F' in cls['timeslot']) or (tuth_count < 2 and 'Tu' in cls['timeslot'] and 'Th' in cls['timeslot']):
+                patterned_classes.append(cls)
+            else:
+                remaining_classes.append(cls)
+        else:
+            remaining_classes.append(cls)
+
+    # If the pattern is incomplete, fill it with the most common start times
+    if len(patterned_classes) < 3 and mwf_time:
+        patterned_classes.extend([cls for cls in remaining_classes if cls['timeslot'].endswith(mwf_time)])
+        remaining_classes = [cls for cls in remaining_classes if not cls['timeslot'].endswith(mwf_time)]
+    elif len(patterned_classes) < 2 and tuth_time:
+        patterned_classes.extend([cls for cls in remaining_classes if cls['timeslot'].endswith(tuth_time)])
+        remaining_classes = [cls for cls in remaining_classes if not cls['timeslot'].endswith(tuth_time)]
+
+    return {'patterned_classes': patterned_classes, 'remaining_classes': remaining_classes}
+
 
 
 # Function to get all datetime slots for a class based on its week days and start time
@@ -709,7 +770,7 @@ def optimize_remaining_classes(class_sections, remaining_timeslots,used_timeslot
         for tsl in remaining_timeslots:
             if pulp.value(x[cls['section'], tsl]) == 1:
                 scheduled_sections.append({
-                    'section_name': cls['section'],
+                    'section': cls['section'],
                     'timeslot': tsl,
                     'instructor': cls['faculty1'],
                     'room': cls['room'],
@@ -743,11 +804,15 @@ def optimize_schedule(class_sections):
     timeslots = [f"{mt['days']} - {mt['start_time']}" for mt in meeting_times]
 
     prob = pulp.LpProblem("Class_Scheduling", pulp.LpMinimize) 
-    x = pulp.LpVariable.dicts("x", ((get_value(cls, 'section'), tsl) for cls in class_sections for tsl in timeslots), cat='Binary')
+    
+    x = pulp.LpVariable.dicts("x", ((cls['section'], tsl) for cls in class_sections for tsl in timeslots), cat='Binary')
 
-    prob += pulp.lpSum(x[get_value(cls, 'section'), tsl] for cls in class_sections for tsl in timeslots)
+    prob += pulp.lpSum(x[cls['section'], tsl] for cls in class_sections for tsl in timeslots)
 
-
+     # Constraint: Each class must take exactly one timeslot
+    for cls in class_sections:
+        unique_constraint_name = f"OneClassOneSlotConstraint_{cls['section']}"  # Generate a unique constraint name
+        prob += pulp.lpSum(x[cls['section'], tsl] for tsl in timeslots if (cls['section'], tsl) in x) == 1, unique_constraint_name
 
     # Create a set of unique rooms
     rooms = set(cls['room'] for cls in class_sections if cls['room'].strip())
@@ -823,6 +888,14 @@ def optimize_schedule(class_sections):
         
     # Solve the problem
     prob.solve()
+    
+    
+     # Print the status of the problem
+    print("Status:", pulp.LpStatus[prob.status])
+
+    # Debugging: Check if any variables are set to 1
+    is_any_variable_set = any(pulp.value(var) == 1 for var in x.values())
+    print("Is any variable set to 1:", is_any_variable_set)
 
     # Create a list to store the scheduled class sections
     scheduled_sections = []
@@ -830,11 +903,11 @@ def optimize_schedule(class_sections):
         for tsl in timeslots:
             if pulp.value(x[get_value(cls, 'section'), tsl]) == 1:
                 scheduled_sections.append({
-                    'section_name': get_value(cls, 'section'),
+                    'section': get_value(cls, 'section'),
                     'timeslot': tsl,
                     'instructor': get_value(cls, 'faculty1'),
                     'room': get_value(cls, 'room'),
-                    'sec_cap': get_value(cls, 'sec_cap', 'Unknown'),
+                    'secCap': get_value(cls, 'secCap', 'Unknown'),
                     'bldg': get_value(cls, 'bldg', 'Unknown'),
                 })
 
@@ -915,7 +988,7 @@ def process_calendar_data(three_credit_results, remaining_class_results):
     # Process classes
     for results in [three_credit_results['scheduled_sections'], remaining_class_results['scheduled_sections']]:
         for result in results:
-            section_name = result['section_name']
+            section_name = result['section']
             timeslot = result['timeslot']
             days, start_time = timeslot.split(' - ')
             start_time_obj = datetime.strptime(start_time, '%I:%M%p')
@@ -938,7 +1011,6 @@ def process_calendar_data(three_credit_results, remaining_class_results):
                     'end': end_datetime.strftime('%Y-%m-%dT%H:%M:%S'),
                     'instructor': result['instructor'],
                     'room': result['room'],
-                    'capacity' : result['secCap'],
                     'bldg': result['bldg'],
                     'color': color
                 }
@@ -952,37 +1024,37 @@ def combine_and_expand_schedule(three_credit_results, remaining_class_results, m
 
     # Expand and add three-credit class schedules
     for result in three_credit_results['scheduled_sections']:
-        cls = next((c for c in class_sections if c.sec_name == result['section_name']), None)
+        cls = next((c for c in class_sections if c.section== result['section']), None)
         if cls:
             # Expand each three-credit class into individual time slots based on its meeting days
             for day in cls.week_days.split():
                 day_specific_slot = f"{day} - {result['timeslot'].split(' - ')[1]}"
                 combined_schedule.append({
-                    'section_name': result['section_name'],
+                    'section': cls.section,
                     'timeslot': day_specific_slot,
                     'instructor': cls.faculty1,
                     'room': cls.room,
-                    'min_credit': cls.min_credit,
+                    'minCredit': cls.minCredit,
                     'unwanted_timeslots': cls.unwanted_timeslots,
-                    'sec_cap' : cls.sec_cap,
+                    'secCap': cls.secCap,
                     'bldg': cls.bldg,
                     'avoid_classes': cls.avoid_classes,
-                    'holdValue': cls.holdValue
+                    'hold_value': cls.holdValue
                 })
 
     # Add one-credit class schedules with proper timeslot format
     for result in remaining_class_results['scheduled_sections']:
-        cls = next((c for c in class_sections if c.sec_name == result['section_name']), None)
+        cls = next((c for c in class_sections if c.section == result['section']), None)
         if cls:
             combined_schedule.append({
-                'section_name': result['section_name'],
+                'section': cls.section,
                 'timeslot': result['timeslot'],
                 'instructor': cls.faculty1,
                 'room': cls.room,
-                'min_credit': cls.min_credit,
+                'minCredit': cls.minCredit,
                 'unwanted_timeslots': cls.unwanted_timeslots,
-                'holdValue': cls.holdValue,
-                'sec_cap' : cls.sec_cap,
+                'hold_value': cls.holdValue,
+                'secCap': cls.secCap,
                 'avoid_classes': cls.avoid_classes
             })
 
@@ -994,11 +1066,11 @@ def format_for_pulp(schedule):
 
     for class_section in schedule:
         formatted_class = {
-            'sec_name': class_section['section_name'],
+            'section': class_section['section'],
             'timeslot': class_section['timeslot'],
             'faculty1': class_section['instructor'],
             'room': class_section.get('room', 'Unknown'),
-            'sec_cap': class_section.get('sec_cap', 'Unknown'),
+            'secCap': class_section.get('secCap', 'Unknown'),
             'bldg': class_section.get('bldg', 'Unknown'),
             'avoid_classes': class_section.get('avoid_classes', []),
             'unwanted_timeslots': class_section.get('unwanted_timeslots', []),
@@ -1006,7 +1078,7 @@ def format_for_pulp(schedule):
         }
 
         # Additional attributes might be needed depending on your Pulp functions
-        # For example, if min_credit or week_days are needed, add them here.
+        # For example, if minCredit or week_days are needed, add them here.
 
         formatted_schedule.append(formatted_class)
 
@@ -1023,7 +1095,7 @@ def expand_three_credit_class(class_result, meeting_times, class_section):
             'timeslot': f"{day} - {class_result['timeslot'].split(' ')[1]}",
             'instructor': class_section.faculty1,
             'room': class_section.room,
-            'min_credit': class_section.min_credit,
+            'minCredit': class_section.minCredit,
             'unwanted_timeslots': class_section.unwanted_timeslots
         }
         expanded_slots.append(expanded_slot)
@@ -1108,20 +1180,20 @@ def extract_schedule_from_pulp_results(pulp_results):
 def custom_mutate(individual, full_meeting_times, mutpb):
     section_timeslots_map = {}
     for class_section in individual:
-        section_name = class_section['section_name']
+        section_name = class_section['section']
         section_timeslots_map.setdefault(section_name, []).append(class_section)
 
     for i in range(len(individual)):
         if random.random() < mutpb:
             class_section = individual[i]
-            min_credit = int(class_section['min_credit'])
-            section_name = class_section['section_name']
+            minCredit = int(class_section['minCredit'])
+            section_name = class_section['section']
 
             pattern_timeslots = []
             mwf_timeslots = []
             tuth_timeslots = []
 
-            if min_credit >= 3:
+            if minCredit >= 3:
                 all_timeslots = section_timeslots_map[section_name]
                 is_mwf = all(['M' in ts['timeslot'] and 'W' in ts['timeslot'] and 'F' in ts['timeslot'] for ts in all_timeslots])
                 is_tuth = all(['Tu' in ts['timeslot'] and 'Th' in ts['timeslot'] for ts in all_timeslots])
@@ -1192,7 +1264,7 @@ def merge_class_details(schedule_result, class_section, day=None):
     merged_result = schedule_result.copy()
     merged_result['instructor'] = class_section.faculty1
     merged_result['room'] = class_section.room
-    merged_result['min_credit'] = class_section.min_credit
+    merged_result['minCredit'] = class_section.minCredit
     merged_result['unwanted_timeslots'] = class_section.unwanted_timeslots
 
     if day:
@@ -1219,12 +1291,12 @@ def custom_crossover(ind1, ind2):
     for ind in [ind1, ind2]:
         # Process each class section in the individual
         for class_section in ind:
-            min_credit = int(class_section['min_credit'])
-            course_identifier = class_section['section_name'].split('_')[0]
-            course_timeslots = [cs for cs in ind if cs['section_name'].startswith(course_identifier)]
+            minCredit = int(class_section['minCredit'])
+            course_identifier = class_section['section'].split('_')[0]
+            course_timeslots = [cs for cs in ind if cs['section'].startswith(course_identifier)]
 
             # Check if the pattern is maintained for 3+ credit classes
-            if min_credit >= 3:
+            if minCredit >= 3:
                 mwf_count = sum(['M' in ts['timeslot'] and 'W' in ts['timeslot'] and 'F' in ts['timeslot'] for ts in course_timeslots])
                 tuth_count = sum(['Tu' in ts['timeslot'] and 'Th' in ts['timeslot'] for ts in course_timeslots])
 
@@ -1484,8 +1556,8 @@ def evaluateSchedule(individual):
         mutual_exclusion_violations = 0
 
         # Store timing and days for classes 3+ credits
-        if int(meeting['min_credit']) >= 3:
-            course_identifier = meeting['section_name'].split('_')[0]
+        if int(meeting['minCredit']) >= 3:
+            course_identifier = meeting['section'].split('_')[0]
             class_timings.setdefault(course_identifier, set()).add(meeting['timeslot'])
             days = meeting['timeslot'].split(' - ')[0]
             class_days.setdefault(course_identifier, set()).update(days.split())
@@ -1502,13 +1574,13 @@ def evaluateSchedule(individual):
 
                 # Mutual exclusion violations
                 mutually_exclusive_sections = meeting.get('avoid_classes', [])
-                if other_meeting['section_name'] in mutually_exclusive_sections:
+                if other_meeting['section'] in mutually_exclusive_sections:
                     mutual_exclusion_violations += 1
 
         # Proximity issues for 1-credit classes
-        if meeting['min_credit'] == '1' and meeting['section_name'].endswith("_one_credit"):
-            base_sec_name = meeting['section_name'][:-11]
-            three_credit_class_meetings = [s for s in individual if s['section_name'] == base_sec_name]
+        if meeting['minCredit'] == '1' and meeting['section'].endswith("_one_credit"):
+            base_sec_name = meeting['section'][:-11]
+            three_credit_class_meetings = [s for s in individual if s['section'] == base_sec_name]
             for cls_3_meeting in three_credit_class_meetings:
                 time_diff = abs((datetime.strptime(meeting['timeslot'].split(' - ')[1], '%I:%M%p') - 
                                  datetime.strptime(cls_3_meeting['timeslot'].split(' - ')[1], '%I:%M%p')).total_seconds()) / 3600
@@ -1531,7 +1603,7 @@ def evaluateSchedule(individual):
 
         # Update total score and details
         total_score += class_score
-        detailed_scores[meeting['section_name']] = {
+        detailed_scores[meeting['section']] = {
             'score': class_score,
             'overlap_violations': overlap_violations,
             'instructor_conflicts': instructor_conflicts,
