@@ -50,20 +50,7 @@ def follows_pattern(timeslot, pattern):
         return all(day in days for day in ['Tu', 'Th'])
     return False
 
-def create_individual(combined_expanded_schedule, full_meeting_times, mutation_rate=0.1):
-    """
-    Create an individual schedule by using the PuLP optimized schedule and 
-    introducing variations to some class sections while respecting the MWF/TuTh pattern
-    and one section per day requirements.
-
-    Args:
-        combined_expanded_schedule (list): List of class sections with PuLP optimized details.
-        full_meeting_times (list): List of all available meeting times.
-        mutation_rate (float): Probability of mutating a given class section's timeslot.
-
-    Returns:
-        An individual schedule for the GA.
-    """
+def create_individual(combined_expanded_schedule, full_meeting_times, mutation_rate=0.05):
     individual = []
     day_assignment = {}  # Dictionary to track day assignments for each course
 
@@ -74,23 +61,28 @@ def create_individual(combined_expanded_schedule, full_meeting_times, mutation_r
 
         # Randomly decide whether to mutate this class section
         if random.random() < mutation_rate:
-            # Filter timeslots based on the pattern and day constraints
-            pattern = 'MWF' if follows_pattern(cls['timeslot'], 'MWF') else 'TuTh'
-            available_timeslots = [ts for ts in full_meeting_times 
-                                   if follows_pattern(f"{ts['days']} - {ts['start_time']}", pattern)
-                                   and ts['days'] not in day_assignment.get(course_identifier, set())]
+            # Determine the current pattern (MWF or TuTh) of the class
+            current_pattern = 'MWF' if 'M' in cls['timeslot'] or 'W' in cls['timeslot'] or 'F' in cls['timeslot'] else 'TuTh'
+            
+            # Filter timeslots based on the pattern and avoid clashes on the same day
+            available_timeslots = [
+                ts for ts in full_meeting_times
+                if ts['days'] in cls['timeslot'] and
+                   ts['days'] not in day_assignment.get(course_identifier, set())
+            ]
 
             # If available timeslots are found, choose one randomly
             if available_timeslots:
                 chosen_timeslot = random.choice(available_timeslots)
                 new_class_section['timeslot'] = f"{chosen_timeslot['days']} - {chosen_timeslot['start_time']}"
                 # Update day assignment for the course
-                day_assignment.setdefault(course_identifier, set()).update(chosen_timeslot['days'].split())
+                day_assignment.setdefault(course_identifier, set()).add(chosen_timeslot['days'])
 
         # Add the class section to the individual schedule
         individual.append(new_class_section)
 
     return creator.Individual(individual)
+
 
 
 
@@ -1014,20 +1006,36 @@ def combine_and_expand_schedule(three_credit_results, remaining_class_results, m
                 })
 
     # Add one-credit class schedules with proper timeslot format
+    # Continue to process each result in 'remaining_class_results'
     for result in remaining_class_results['scheduled_sections']:
-        cls = next((c for c in class_sections if c.section == result['section']), None)
+        section_name = result['section']
+
+        # Check if the section name ends with '_one_credit'
+        if section_name.endswith('_one_credit'):
+            # Remove the '_one_credit' suffix to match with 'class_sections'
+            base_section_name = section_name[:-11]  # 11 characters in '_one_credit'
+        else:
+            base_section_name = section_name
+
+        # Find the corresponding class section in 'class_sections'
+        cls = next((c for c in class_sections if c.section == base_section_name), None)
+        
+        # Check if a corresponding class section was found
         if cls:
+            # Append the formatted class section to 'combined_schedule'
             combined_schedule.append({
-                'section': cls.section,
+                'section': section_name,  # Keep the original section name
                 'timeslot': result['timeslot'],
                 'faculty1': cls.faculty1,
                 'room': cls.room,
-                'minCredit': cls.minCredit,
+                 'minCredit': cls.minCredit,
                 'unwanted_timeslots': cls.unwanted_timeslots,
                 'hold_value': cls.holdValue,
                 'secCap': cls.secCap,
                 'avoid_classes': cls.avoid_classes
             })
+
+    # 'combined_schedule' now contains the formatted schedule including the remaining class results
 
     return combined_schedule
 
@@ -1245,66 +1253,233 @@ def merge_class_details(schedule_result, class_section, day=None):
     return merged_result
 
 
+
+
+def determine_class_pattern(course_timeslots):
+    # Count occurrences of each day in the timeslots
+    day_count = {'M': 0, 'W': 0, 'F': 0, 'Tu': 0, 'Th': 0}
+    for ts in course_timeslots:
+        day = ts['timeslot'].split(' - ')[0]
+        if day in day_count:
+            day_count[day] += 1
+
+    # Determine the pattern based on the counts
+    if day_count['M'] > 0 and day_count['W'] > 0 and day_count['F'] > 0:
+        return 'MWF'
+    elif day_count['Tu'] > 0 and day_count['Th'] > 0:
+        return 'TuTh'
+    else:
+        return 'Other'
+
+def group_by_pattern(individual):
+    # Group classes by their section and determine the overall pattern
+    grouped_classes = {}
+    for cls in individual:
+        course_identifier = cls['section'].split('_')[0]
+        grouped_classes.setdefault(course_identifier, []).append(cls)
+
+    # Separate classes into MWF, TuTh, and Others based on their determined pattern
+    mwf_classes = []
+    tuth_classes = []
+    other_classes = []
+
+    for course_identifier, course_timeslots in grouped_classes.items():
+        pattern = determine_class_pattern(course_timeslots)
+        if pattern == 'MWF':
+            mwf_classes.extend(course_timeslots)
+        elif pattern == 'TuTh':
+            tuth_classes.extend(course_timeslots)
+        else:
+            other_classes.extend(course_timeslots)
+
+    return mwf_classes, tuth_classes, other_classes
+
+
+def maintain_constraints(individual, full_meeting_times):
+    # Ensures no instructor or room conflicts in the same timeslot
+    for cls in individual:
+        current_day = cls['timeslot'].split(' - ')[0]
+        same_day_timeslots = [ts for ts in full_meeting_times if current_day in ts['days']]
+        # Ensure no conflict for instructor and room
+        # ... (Add logic as per your system's rules)
+
+def is_valid_swap(section_group_1, section_group_2, full_schedule):
+    # Function to check for room or instructor conflicts
+    def has_conflict(section, assignments):
+        timeslot = section['timeslot']
+        return (section['room'] in assignments.get(timeslot, {}).get('rooms', set()) or 
+                section['faculty1'] in assignments.get(timeslot, {}).get('instructors', set()))
+
+    # Create a map of current assignments
+    current_assignments = {}
+    for cls in full_schedule:
+        timeslot = cls['timeslot']
+        current_assignments.setdefault(timeslot, {'rooms': set(), 'instructors': set()})
+        current_assignments[timeslot]['rooms'].add(cls['room'])
+        current_assignments[timeslot]['instructors'].add(cls['faculty1'])
+
+    # Temporarily remove the sections in the groups from the current assignments
+    for group in [section_group_1, section_group_2]:
+        for section in group:
+            current_assignments[section['timeslot']]['rooms'].remove(section['room'])
+            current_assignments[section['timeslot']]['instructors'].remove(section['faculty1'])
+
+    # Check if adding sections from one group to another causes conflicts
+    for group in [section_group_1, section_group_2]:
+        for section in group:
+            if has_conflict(section, current_assignments):
+                return False  # Conflict detected, swap not valid
+
+    return True  # No conflicts, swap is valid
+
+
+
+
+def is_valid_swap(section_group_1, section_group_2, full_schedule):
+    # Function to check if adding a section to the schedule causes a conflict
+    def causes_conflict(new_section, schedule):
+        for existing_section in schedule:
+            if new_section['timeslot'] == existing_section['timeslot']:
+                if new_section['room'] == existing_section['room'] or new_section['faculty1'] == existing_section['faculty1']:
+                    return True  # Conflict found
+        return False  # No conflict
+
+    # Create a temporary schedule excluding the sections from both groups
+    temp_schedule = [section for section in full_schedule if section not in section_group_1 + section_group_2]
+
+    # Check for conflicts after adding each section from both groups to the temporary schedule
+    for section in section_group_1 + section_group_2:
+        if causes_conflict(section, temp_schedule):
+            return False  # Swap causes a conflict
+        else:
+            # Temporarily add the section to the schedule for further conflict checks
+            temp_schedule.append(section)
+
+    return True  # Swap is valid without any conflicts
+
+
+
+def is_valid_individual(individual):
+    full_meeting_times = create_full_meeting_times()
+    # Initialize dictionaries for room and instructor assignments
+    room_assignments = {}
+    instructor_assignments = {}
+
+    # Initialize a list to keep track of sections causing failures
+    failure_sections = []
+
+    # Check if every class has a valid timeslot
+    valid_timeslots = {f"{ts['days']} - {ts['start_time']}" for ts in full_meeting_times}
+    for cls in individual:
+        if cls['timeslot'] not in valid_timeslots:
+            failure_sections.append((cls['section'], 'Invalid timeslot'))  # Add invalid timeslot to failure list
+
+    # Group classes by their base section name to check pattern adherence
+    section_groupings = {}
+    for cls in individual:
+        base_section_name = cls['section'].split('_')[0]
+        section_groupings.setdefault(base_section_name, []).append(cls)
+
+    # Process each group for pattern adherence and conflicts
+    for base_section_name, sections in section_groupings.items():
+        if any(int(cls['minCredit']) >= 3 for cls in sections) and not base_section_name.endswith("_one_credit"):
+            mwf_sections = [cls for cls in sections if all(day in cls['timeslot'] for day in ['M', 'W', 'F'])]
+            tuth_sections = [cls for cls in sections if 'Tu' in cls['timeslot'] or 'Th' in cls['timeslot']]
+
+            # Collect the start times of MWF and TuTh sections
+            mwf_times = set(cls['timeslot'].split(' - ')[1] for cls in mwf_sections)
+            tuth_times = set(cls['timeslot'].split(' - ')[1] for cls in tuth_sections)
+
+            # Ensure MWF and TuTh sections are not only on the correct days but also at the same time
+            if not (len(mwf_times) == 1 and len(mwf_sections) == 3) and not (len(tuth_times) == 1 and len(tuth_sections) == 2):
+                failure_sections.append((base_section_name, 'Pattern adherence'))  # Add to failure sections list
+
+        # Check for room and instructor conflicts
+        for cls in sections:
+            timeslot = cls['timeslot']
+            room = cls['room']
+            instructor = cls['faculty1']
+
+            # Room conflict
+            if timeslot in room_assignments and room in room_assignments[timeslot]:
+                failure_sections.append((cls['section'], 'Room conflict'))  # Add to failure sections list
+
+            # Instructor conflict
+            if timeslot in instructor_assignments and instructor in instructor_assignments[timeslot]:
+                failure_sections.append((cls['section'], 'Instructor conflict'))  # Add to failure sections list
+
+    # Check for conflicts with the full meeting times
+    for cls in individual:
+        current_day = cls['timeslot'].split(' - ')[0]
+        same_day_timeslots = [ts for ts in full_meeting_times if current_day in ts['days']]
+
+        # If there are no available timeslots on the same day, it's a violation
+        if not any(cls['timeslot'] == f"{ts['days']} - {ts['start_time']}" for ts in same_day_timeslots):
+            failure_sections.append((cls['section'], 'No available timeslot on the same day'))  # Add to failure sections list
+
+    # Return False with failure sections if any, else True
+    return (False, failure_sections) if failure_sections else (True, [])
+
+
+
+
+
+
+def follows_pattern(timeslot, pattern):
+    """Check if a timeslot follows a specific pattern (MWF or TuTh)."""
+    days = timeslot.split(' - ')[0]
+    if pattern == 'MWF':
+        return all(day in days for day in ['M', 'W', 'F'])
+    elif pattern == 'TuTh':
+        return all(day in days for day in ['Tu', 'Th'])
+    return False
+
+
+
+
+
 def custom_crossover(ind1, ind2):
     full_meeting_times = create_full_meeting_times()
-    size = min(len(ind1), len(ind2))
-    cxpoint1 = random.randint(1, size - 1)
-    cxpoint2 = random.randint(1, size - 1)
-    if cxpoint2 >= cxpoint1:
-        cxpoint2 += 1
-    else:
-        cxpoint1, cxpoint2 = cxpoint2, cxpoint1
 
-    # Perform the crossover
-    ind1[cxpoint1:cxpoint2], ind2[cxpoint1:cxpoint2] = ind2[cxpoint1:cxpoint2], ind1[cxpoint1:cxpoint2]
+    # Group classes by pattern
+    mwf1, tuth1, other1 = group_by_pattern(ind1)
+    mwf2, tuth2, other2 = group_by_pattern(ind2)
 
-    # Adjust timeslots for all classes to maintain constraints
-    for ind in [ind1, ind2]:
-        # Process each class section in the individual
-        for class_section in ind:
-            minCredit = int(class_section['minCredit'])
-            course_identifier = class_section['section'].split('_')[0]
-            course_timeslots = [cs for cs in ind if cs['section'].startswith(course_identifier)]
+    # Randomly select crossover points for MWF and TuTh patterns
+    crossover_point_mwf = random.randint(1, min(len(mwf1), len(mwf2)) - 1)
+    crossover_point_tuth = random.randint(1, min(len(tuth1), len(tuth2)) - 1)
 
-            # Check if the pattern is maintained for 3+ credit classes
-            if minCredit >= 3:
-                mwf_count = sum(['M' in ts['timeslot'] and 'W' in ts['timeslot'] and 'F' in ts['timeslot'] for ts in course_timeslots])
-                tuth_count = sum(['Tu' in ts['timeslot'] and 'Th' in ts['timeslot'] for ts in course_timeslots])
+    # Perform partial swaps if valid
+    if is_valid_individual(mwf1[crossover_point_mwf:] + tuth1 + other1) and \
+       is_valid_individual(mwf2[crossover_point_mwf:] + tuth2 + other2):
+        temp = mwf1[crossover_point_mwf:]
+        mwf1[crossover_point_mwf:] = mwf2[crossover_point_mwf:]
+        mwf2[crossover_point_mwf:] = temp
 
-                # Determine the desired pattern based on the existing count
-                desired_pattern = 'MWF' if mwf_count >= tuth_count else 'TuTh'
+    if is_valid_individual(tuth1[crossover_point_tuth:] + mwf1 + other1) and \
+       is_valid_individual(tuth2[crossover_point_tuth:] + mwf2 + other2):
+        temp = tuth1[crossover_point_tuth:]
+        tuth1[crossover_point_tuth:] = tuth2[crossover_point_tuth:]
+        tuth2[crossover_point_tuth:] = temp
 
-                # Adjust timeslots to match the desired pattern
-                for ts in course_timeslots:
-                    # Choose timeslots based on the desired pattern
-                    if desired_pattern == 'MWF':
-                        suitable_timeslots = [time for time in full_meeting_times if 'M' in time['days'] and 'W' in time['days'] and 'F' in time['days']]
-                    else:
-                        suitable_timeslots = [time for time in full_meeting_times if 'Tu' in time['days'] and 'Th' in time['days']]
+    # Swap other classes if valid
+    crossover_point_other = random.randint(1, len(other1))
+    if is_valid_individual(other1[:crossover_point_other] + mwf1 + tuth1) and \
+       is_valid_individual(other2[:crossover_point_other] + mwf2 + tuth2):
+        temp = other1[:crossover_point_other]
+        other1[:crossover_point_other] = other2[:crossover_point_other]
+        other2[:crossover_point_other] = temp
 
-                    # Assign a new timeslot adhering to the pattern
-                    if suitable_timeslots:
-                        new_timeslot = random.choice(suitable_timeslots)
-                        ts['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
-                    else:
-                        # Retain original timeslot if no suitable new timeslot is found
-                        pass  # No change needed
+    # Reconstruct ind1 and ind2 from the modified groups
+    ind1_new = mwf1 + tuth1 + other1
+    ind2_new = mwf2 + tuth2 + other2
 
-            # For classes with less than 3 credits, ensure they have a valid timeslot
-            else:
-                # Extract the day part from the class section's current timeslot
-                current_day = class_section['timeslot'].split(' - ')[0]
+    # Invalidate the fitness of the modified individuals
+    del ind1.fitness.values
+    del ind2.fitness.values
 
-                # Filter available timeslots for the same day of the week
-                same_day_timeslots = [ts for ts in full_meeting_times if current_day in ts['days']]
-
-                # Assign a new timeslot on the same day
-                if same_day_timeslots:
-                    new_timeslot = random.choice(same_day_timeslots)
-                    class_section['timeslot'] = f"{new_timeslot['days']} - {new_timeslot['start_time']}"
-                else:
-                    # Retain original timeslot if no suitable new timeslot is found
-                    pass  # No change needed
+    ind1[:] = ind1_new
+    ind2[:] = ind2_new
 
     return ind1, ind2
 
@@ -1313,7 +1488,8 @@ def custom_crossover(ind1, ind2):
 
 
 
-def run_genetic_algorithm(combined_expanded_schedule, ngen=100, pop_size=50, cxpb=0.5, mutpb=0.2):
+
+def run_genetic_algorithm(combined_expanded_schedule, ngen=800, pop_size=50, cxpb=0.3, mutpb=0.2):
     # Create necessary data
     full_meeting_times_data = create_full_meeting_times()
 
@@ -1329,7 +1505,7 @@ def run_genetic_algorithm(combined_expanded_schedule, ngen=100, pop_size=50, cxp
         "mutate", 
         custom_mutate, 
         full_meeting_times=full_meeting_times_data, 
-        mutpb=0.3
+        mutpb=0.2
     )
     # Register mate and select methods
     toolbox.register("mate", custom_crossover)
