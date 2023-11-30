@@ -1392,12 +1392,12 @@ def is_valid_individual(individual):
         if day in section_day_assignments.get(cls['section'], set()):  # Use full section name
             failure_sections.append(cls['section'])
         section_day_assignments.setdefault(cls['section'], set()).add(day)
-
+        full_room = cls.get('bldg') + ' ' + cls['room']
         # Check for room and instructor conflicts
         if cls['timeslot'] in room_assignments:
-            if cls['room'] in room_assignments[cls['timeslot']] or cls['faculty1'] in instructor_assignments[cls['timeslot']]:
+            if full_room in room_assignments[cls['timeslot']] or cls['faculty1'] in instructor_assignments[cls['timeslot']]:
                 failure_sections.append(cls['section'])
-        room_assignments.setdefault(cls['timeslot'], set()).add(cls['room'])
+        room_assignments.setdefault(cls['timeslot'], set()).add(full_room)
         instructor_assignments.setdefault(cls['timeslot'], set()).add(cls['faculty1'])
 
     # Check for pattern adherence for groups of sections
