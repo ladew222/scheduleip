@@ -62,7 +62,7 @@ def create_individual(failed_sections,combined_expanded_schedule, mutation_rate=
         course_identifier = cls['section'].split('_')[0]
         
         
-        first_elements_list = [item[0] for item in failed_sections[2]]
+        first_elements_list = [item[0] for item in failed_sections]
         # Check if the current class section is in the list of failed sections
         if course_identifier in first_elements_list or 1==1:
             # Randomly decide whether to mutate this class section
@@ -898,6 +898,78 @@ def get_weekday_date(reference_date, target_weekday):
     days_difference = target_weekday - reference_weekday
     return reference_date + timedelta(days=days_difference)
 
+def annotate_failure_reasons(schedule, failure_report):
+    # Check if failure_report[1] has values
+    if  failure_report and  len(failure_report)>0:
+        failure_details = {section_info[0]: section_info[1] for section_info in failure_report}
+        for section in schedule:
+            if section['section'] in failure_details:
+                section['failure_reason'] = failure_details[section['section']]
+            else:
+                section['failure_reason'] = None  # No failure for this section
+    else:
+        # If failure_report[1] is empty, there are no failures
+        for section in schedule:
+            section['failure_reason'] = None  # No failure for this section
+
+    return schedule
+
+from ics import Calendar, Event
+from datetime import datetime, timedelta
+
+def process_calendar_data_to_ics(expanded_schedule):
+    cal = Calendar()
+
+    reference_date = datetime.today()
+    while reference_date.weekday() != 2:  # Adjust to the nearest Wednesday
+        reference_date += timedelta(days=1)
+
+    weekday_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
+
+    for result in expanded_schedule:
+        section_name = result['section']
+        timeslot = result['timeslot']
+        day, start_time = timeslot.split(' - ')
+
+        # Check if day is 'nan' or not in weekday_map
+        if day == 'nan' or day not in weekday_map:
+            print(f"Skipping invalid day '{day}' in timeslot: {timeslot}")
+            continue
+
+        class_date = get_weekday_date(reference_date, weekday_map[day])
+        start_datetime = datetime.combine(class_date, datetime.strptime(start_time, '%I:%M%p').time())
+        duration = timedelta(hours=1)
+        end_datetime = start_datetime + duration
+
+        # Create an event
+        event = Event()
+        event.name = f"{section_name} Class"
+        event.begin = start_datetime
+        event.end = end_datetime
+        event.location = result['room']
+        event.description = f"Class with {result['faculty1']}"
+
+        # Add event to calendar
+        cal.events.add(event)
+
+    # Convert the calendar to a string
+    return str(cal)
+
+def get_weekday_date(reference_date, weekday_offset):
+    """
+    Get the date for a specific weekday based on a reference date.
+    """
+    target_weekday = (reference_date.weekday() + weekday_offset) % 7
+    return reference_date + timedelta(days=target_weekday - reference_date.weekday())
+
+# Example usage:
+# expanded_schedule = [...]  # Your expanded schedule data here
+# ics_calendar_str = process_calendar_data_to_ics(expanded_schedule)
+# with open("schedule.ics", "w") as file:
+#     file.write(ics_calendar_str)
+
+
+
 def process_calendar_data_expanded(expanded_schedule):
     calendar_data = []
     color_cache = {}
@@ -1036,11 +1108,13 @@ def combine_and_expand_schedule(three_credit_results, remaining_class_results, m
                 'timeslot': result['timeslot'],
                 'faculty1': cls.faculty1,
                 'room': cls.room,
-                 'minCredit': cls.minCredit,
+                'minCredit': cls.minCredit,
                 'unwanted_timeslots': cls.unwanted_timeslots,
                 'hold_value': cls.holdValue,
                 'secCap': cls.secCap,
-                'avoid_classes': cls.avoid_classes
+                'bldg': cls.bldg,
+                'avoid_classes': cls.avoid_classes,
+                'hold_value': cls.holdValue
             })
 
     # 'combined_schedule' now contains the formatted schedule including the remaining class results
@@ -1260,7 +1334,7 @@ def move_slot(cls, individual):
                         
     
 def custom_mutate(individual, report, mutpb):
-    failed_sections = [item[0] for item in report[2]]
+    failed_sections = [item[0] for item in report]
 
     for i, class_section in enumerate(individual):
         section_name = class_section['section']
@@ -1270,11 +1344,11 @@ def custom_mutate(individual, report, mutpb):
 
         if random.random() < adjusted_mutpb:
             success, individual, message = move_slot(class_section, individual)
-            if success:
-                print(f"Mutation successful: {message}")
-            else:
-                print(f"Mutation failed: {message}")
-
+            """            if success:
+                            print(f"Mutation successful: {message}")
+                        else:
+                            print(f"Mutation failed: {message}")
+            """
     return individual,
 
 
@@ -1486,7 +1560,7 @@ def is_valid_individual(individual):
                     failure_sections.append((base_section_name, "pattern adherence", pattern_sections[0]))  # Include an example class for reference
 
         # Return a tuple with a boolean for overall validity and a list of sections that failed validation
-        return False, failure_sections if failure_sections else True, []
+        return failure_sections
 
 
 
@@ -1514,34 +1588,37 @@ def custom_crossover(ind1, ind2):
     mwf1, tuth1, other1 = group_by_pattern(ind1)
     mwf2, tuth2, other2 = group_by_pattern(ind2)
 
-    # Randomly select crossover points for MWF and TuTh patterns
-    crossover_point_mwf = random.randint(1, min(len(mwf1), len(mwf2)) - 1)
-    crossover_point_tuth = random.randint(1, min(len(tuth1), len(tuth2)) - 1)
 
-    # Swap MWF sections if it results in valid schedules
-    mwf1_new = mwf1[:crossover_point_mwf] + mwf2[crossover_point_mwf:]
-    mwf2_new = mwf2[:crossover_point_mwf] + mwf1[crossover_point_mwf:]
-    
-    cross1=is_valid_individual(mwf1_new + tuth1 + other1)
-    cross2=is_valid_individual(mwf2_new + tuth2 + other2)
-    if cross1[0] and cross2[0]:
-        mwf1, mwf2 = mwf1_new, mwf2_new
+    if len(mwf1) > 1 and len(mwf2) and  len(tuth1) > 1 and len(tuth2) > 1:
+        # Randomly select crossover points for MWF and TuTh patterns
+        crossover_point_mwf = random.randint(1, min(len(mwf1), len(mwf2)) - 1)
+        crossover_point_tuth = random.randint(1, min(len(tuth1), len(tuth2)) - 1)
 
-    # Swap TuTh sections if it results in valid schedules
-    tuth1_new = tuth1[:crossover_point_tuth] + tuth2[crossover_point_tuth:]
-    tuth2_new = tuth2[:crossover_point_tuth] + tuth1[crossover_point_tuth:]
-    
-    cross3=is_valid_individual(mwf1 + tuth1_new + other1)
-    cross4=is_valid_individual(mwf2 + tuth2_new + other2)
-    if cross3[0] and cross4[0]:
-        tuth1, tuth2 = tuth1_new, tuth2_new
+        # Swap MWF sections if it results in valid schedules
+        mwf1_new = mwf1[:crossover_point_mwf] + mwf2[crossover_point_mwf:]
+        mwf2_new = mwf2[:crossover_point_mwf] + mwf1[crossover_point_mwf:]
+        
+        cross1=is_valid_individual(mwf1_new + tuth1 + other1)
+        cross2=is_valid_individual(mwf2_new + tuth2 + other2)
+        if cross1[0] and cross2[0]:
+            mwf1, mwf2 = mwf1_new, mwf2_new
 
+        # Swap TuTh sections if it results in valid schedules
+        tuth1_new = tuth1[:crossover_point_tuth] + tuth2[crossover_point_tuth:]
+        tuth2_new = tuth2[:crossover_point_tuth] + tuth1[crossover_point_tuth:]
+        
+        cross3=is_valid_individual(mwf1 + tuth1_new + other1)
+        cross4=is_valid_individual(mwf2 + tuth2_new + other2)
+        if cross3[0] and cross4[0]:
+            tuth1, tuth2 = tuth1_new, tuth2_new
+
+    if len(other1) > 1 and len(other2) > 1:
     # Swap other classes if it results in valid schedules
-    crossover_point_other = random.randint(1, len(other1))
-    other1_new = other1[:crossover_point_other] + other2[crossover_point_other:]
-    other2_new = other2[:crossover_point_other] + other1[crossover_point_other:]
-    if is_valid_individual(mwf1 + tuth1 + other1_new)[0] and is_valid_individual(mwf2 + tuth2 + other2_new)[0]:
-        other1, other2 = other1_new, other2_new
+        crossover_point_other = random.randint(1, len(other1))
+        other1_new = other1[:crossover_point_other] + other2[crossover_point_other:]
+        other2_new = other2[:crossover_point_other] + other1[crossover_point_other:]
+        if is_valid_individual(mwf1 + tuth1 + other1_new)[0] and is_valid_individual(mwf2 + tuth2 + other2_new)[0]:
+            other1, other2 = other1_new, other2_new
 
     # Reconstruct ind1 and ind2 from the modified groups
     ind1_new = mwf1 + tuth1 + other1
@@ -1560,77 +1637,6 @@ def custom_crossover(ind1, ind2):
 
 
 
-
-
-
-def run_genetic_algorithm(combined_expanded_schedule, report,ngen=800, pop_size=50, cxpb=0.3, mutpb=0.2):
-    # Create necessary data
-    full_meeting_times_data = create_full_meeting_times()
-
-    # Setup the DEAP toolbox
-    toolbox = base.Toolbox()
-    
-    # Register individual and population creation methods
-    toolbox.register("individual", create_individual, report, combined_expanded_schedule,)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-
-    # Register custom mutate method
-    toolbox.register(
-        "mutate", 
-        custom_mutate,  
-        report=report,
-        mutpb=0.01,
-    )
-    # Register mate and select methods
-    toolbox.register("mate", custom_crossover)
-    toolbox.register("select", tools.selTournament, tournsize=3)
-
-    # Adjust the evaluate function to use only the total score from evaluateSchedule's output
-    def evaluate_wrapper(individual):
-        evaluation_results = evaluateSchedule(individual)
-        return evaluation_results['total_score'],
-
-    toolbox.register("evaluate", evaluate_wrapper)
-
-    # Create initial population
-    population = toolbox.population(n=pop_size)
-
-    # Evaluate initial population's fitness
-    fitnesses = list(map(toolbox.evaluate, population))
-    for ind, fit in zip(population, fitnesses):
-        ind.fitness.values = fit
-
-    # Collecting statistics
-    stats = tools.Statistics(lambda ind: ind.fitness.values)
-    stats.register("avg", np.mean)
-    stats.register("min", np.min)
-    stats.register("max", np.max)
-
-    # Run genetic algorithm
-    final_population, logbook = algorithms.eaSimple(population, toolbox, cxpb, mutpb, ngen, stats=stats, verbose=True)
-
-
-    # Process final population
-    sorted_population = sorted(population, key=lambda ind: ind.fitness.values[0])
-    
-   
-
-    # Identify top unique schedules
-    top_unique_schedules = []
-    used_scores = set()
-    for ind in sorted_population:
-        fitness_score = ind.fitness.values[0]
-        if fitness_score not in used_scores:
-            top_unique_schedules.append((ind, fitness_score))
-            used_scores.add(fitness_score)
-            if len(top_unique_schedules) == 5:
-                break
-
-    
-     # take the top ga solution and split back into 3 and 1 credit classes and rerurn pulp 
-    three_credit_classes, remaining_classes= divide_schedules_by_credit(top_unique_schedules[0][0])
-    
-    return top_unique_schedules
 
 def split_class_sections(class_sections):
     three_credit_sections = []
@@ -1714,6 +1720,9 @@ def optimize():
     #lets validate the results against he constraints using the GA method
     
     failure_report=is_valid_individual(combined_expanded_schedule)
+    
+    # Annotate the combined and expanded schedule with failure reasons
+    annotated_combined_schedule = annotate_failure_reasons(combined_expanded_schedule, failure_report)
 
 
     # use the genetic algorithm evalutaion function to evaluate the schedule
@@ -1722,6 +1731,8 @@ def optimize():
 
     # Run the genetic algorithm to optimize the schedule further
     ga_schedules = run_genetic_algorithm(combined_expanded_schedule,failure_report)
+    
+    #marked_combined_expanded_schedule
 
     all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA', 'slot_differences': count_slot_differences(combined_expanded_schedule, schedule)} for schedule, score in ga_schedules]
     all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
