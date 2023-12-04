@@ -12,21 +12,16 @@ import calendar
 app = Flask(__name__)
 import hashlib
 import pandas as pd
-from deap import base, creator, tools, algorithms
 import random
 import numpy as np
 import random
 from datetime import datetime, timedelta
 from collections import Counter
-
-# Define the problem class
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-creator.create("Individual", list, fitness=creator.FitnessMax)
-
-toolbox = base.Toolbox()
+import uuid
+import os
 
 global_settings = {}
-
+results_storage = {}
 
 def string_to_color(s):
     # Use a hash function to convert the string to a hexadecimal color code
@@ -543,40 +538,40 @@ def read_csv_and_create_class_sections(csv_filename):
     return class_sections
 
 
-def group_and_update_schedule(all_schedules):
+def group_and_update_schedule(schedule_info):
     updated_schedules = []
 
-    for schedule_info in all_schedules:
-        # Divide each schedule into groups of 3-credit and remaining classes
-        three_credit_classes, remaining_classes = divide_schedules_by_credit(schedule_info['schedule'])
 
-        # Group 3-credit classes based on common time patterns
-        grouped_three_credit_classes = []
-        for cls in three_credit_classes:
-            # Use 'get_most_common_start_times' if necessary
-            # mwf_time, tuth_time = get_most_common_start_times([cls]) # If this function is needed
+    # Divide each schedule into groups of 3-credit and remaining classes
+    three_credit_classes, remaining_classes = divide_schedules_by_credit(schedule_info['schedule'])
 
-            # Directly use the timeslot info from the class section
-            grouped_three_credit_classes.append({
-                'section': cls['section'],
-                'timeslot': cls['timeslot'],
-                'minCredit': cls['minCredit'],
-                'secCap': cls['secCap'],
-                'faculty1': cls['faculty1'],
-                'room': cls['room'],
-                'bldg': cls['bldg']
-            })
+    # Group 3-credit classes based on common time patterns
+    grouped_three_credit_classes = []
+    for cls in three_credit_classes:
+        # Use 'get_most_common_start_times' if necessary
+        # mwf_time, tuth_time = get_most_common_start_times([cls]) # If this function is needed
 
-        # Combine the grouped 3-credit classes with remaining classes
-        updated_schedule = grouped_three_credit_classes + remaining_classes
-
-        # Update the schedule in the schedule_info dictionary
-        updated_schedules.append({
-            'schedule': updated_schedule,
-            'score': schedule_info['score'],
-            'algorithm': schedule_info['algorithm'],
-            'slot_differences': schedule_info['slot_differences']
+        # Directly use the timeslot info from the class section
+        grouped_three_credit_classes.append({
+            'section': cls['section'],
+            'timeslot': cls['timeslot'],
+            'minCredit': cls['minCredit'],
+            'secCap': cls['secCap'],
+            'faculty1': cls['faculty1'],
+            'room': cls['room'],
+            'bldg': cls['bldg']
         })
+
+    # Combine the grouped 3-credit classes with remaining classes
+    updated_schedule = grouped_three_credit_classes + remaining_classes
+
+    # Update the schedule in the schedule_info dictionary
+    updated_schedules.append({
+        'schedule': updated_schedule,
+        'score': schedule_info['score'],
+        'algorithm': schedule_info['algorithm'],
+        'slot_differences': schedule_info['slot_differences']
+    })
 
     return updated_schedules
 
@@ -1176,44 +1171,6 @@ def merge_schedules(schedule_1, schedule_2):
     return merged_schedule
 
 
-def repair_schedule(individual):
-    # Divide the schedule into 3-credit and other classes
-    three_credit_classes, other_classes = divide_schedules_by_credit(individual)
-
-    # Format the schedules for Pulp optimization
-    formatted_three_credit_classes = format_for_pulp(three_credit_classes)
-    formatted_other_classes = format_for_pulp(other_classes)
-
-    # Optimize the 3-credit classes with Pulp
-    optimized_three_credit_results = optimize_schedule(formatted_three_credit_classes)
-    
-    # Create used_timeslots based on the optimized 3-credit class results
-    used_timeslots = set()
-    for section in optimized_three_credit_results['scheduled_sections']:
-        used_timeslots.add(section['timeslot'])
-
-    # Calculate remaining timeslots
-    all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
-    remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
-
-    # Optimize the remaining classes with Pulp
-    optimized_other_classes_results = optimize_remaining_classes(
-        formatted_other_classes, 
-        remaining_timeslots, 
-        used_timeslots
-    )
-
-
-    # Extract the optimized schedules from the Pulp results
-    optimized_three_credit_classes = extract_schedule_from_pulp_results(optimized_three_credit_results)
-    optimized_other_classes = extract_schedule_from_pulp_results(optimized_other_classes_results)
-
-    # Merge the optimized schedules back into one
-    repaired_individual = merge_schedules(optimized_three_credit_classes, optimized_other_classes)
-
-    return repaired_individual
-
-# Implement the additional helper functions as needed
 
 def extract_schedule_from_pulp_results(pulp_results):
     extracted_schedule = []
@@ -1279,82 +1236,7 @@ def create_timeslot_availability(individual):
 
     return timeslot_availability, room_availability, instructor_availability
 
-
-
-def move_slot(cls, individual):
-    # Generate availability dictionaries
-    timeslot_availability, room_availability, instructor_availability = create_timeslot_availability(individual)
-
-    section_name = cls['section']
-    minCredit = cls['minCredit']
-    success = False
-    message = ""
-    full_meeting_times = create_full_meeting_times()
-
-    # Function to check if a timeslot is available
-    def is_timeslot_available(timeslot, cls):
-        return timeslot not in room_availability.get(cls['timeslot'], set()) and \
-               timeslot not in instructor_availability.get(cls['timeslot'], set())
-
-    # Extract day(s) and determine the pattern from the current timeslot of the class section
-    current_timeslot = cls['timeslot']
-    current_day_parts = current_timeslot.split(' - ')[0].split(' ')
-    pattern = 'MWF' if all(day in ['M', 'W', 'F'] for day in current_day_parts) else 'TuTh'
-
-    new_timeslot = None
-    for day in current_day_parts:
-        if day in timeslot_availability and pattern in timeslot_availability[day]:
-            for ts in timeslot_availability[day][pattern]:
-                if is_timeslot_available(ts, cls):
-                    new_timeslot = ts
-                    break
-            if new_timeslot:
-                break
-
-    if new_timeslot:
-        # Update timeslot for all related sections
-        for section in individual:
-            if section['section'] == section_name:
-                section['timeslot'] = new_timeslot
-        success = True
-        message = f"Moved section {section_name} to new timeslot {new_timeslot}"
-    else:
-        message = f"Failed to move section {section_name}, no available timeslot found"
-
-    return success, individual, message
-
-
-
-
-
-
-        
        
-                    
-                        
-    
-def custom_mutate(individual, report, mutpb):
-    failed_sections = [item[0] for item in report]
-
-    for i, class_section in enumerate(individual):
-        section_name = class_section['section']
-
-        # Increase mutation probability for failed sections
-        adjusted_mutpb = mutpb * 10 if section_name in failed_sections else mutpb
-
-        if random.random() < adjusted_mutpb:
-            success, individual, message = move_slot(class_section, individual)
-            """            if success:
-                            print(f"Mutation successful: {message}")
-                        else:
-                            print(f"Mutation failed: {message}")
-            """
-    return individual,
-
-
-
-
-
 
 def extract_schedule_from_pulp_results(pulp_results):
     extracted_schedule = []
@@ -1377,7 +1259,6 @@ def extract_schedule_from_pulp_results(pulp_results):
             extracted_schedule.append(formatted_section)
 
     return extracted_schedule
-
 
 
 
@@ -1437,68 +1318,6 @@ def group_by_pattern(individual):
 
     return mwf_classes, tuth_classes, other_classes
 
-
-def maintain_constraints(individual, full_meeting_times):
-    # Ensures no instructor or room conflicts in the same timeslot
-    for cls in individual:
-        current_day = cls['timeslot'].split(' - ')[0]
-        same_day_timeslots = [ts for ts in full_meeting_times if current_day in ts['days']]
-        # Ensure no conflict for instructor and room
-        # ... (Add logic as per your system's rules)
-
-def is_valid_swap(section_group_1, section_group_2, full_schedule):
-    # Function to check for room or instructor conflicts
-    def has_conflict(section, assignments):
-        timeslot = section['timeslot']
-        return (section['room'] in assignments.get(timeslot, {}).get('rooms', set()) or 
-                section['faculty1'] in assignments.get(timeslot, {}).get('instructors', set()))
-
-    # Create a map of current assignments
-    current_assignments = {}
-    for cls in full_schedule:
-        timeslot = cls['timeslot']
-        current_assignments.setdefault(timeslot, {'rooms': set(), 'instructors': set()})
-        current_assignments[timeslot]['rooms'].add(cls['room'])
-        current_assignments[timeslot]['instructors'].add(cls['faculty1'])
-
-    # Temporarily remove the sections in the groups from the current assignments
-    for group in [section_group_1, section_group_2]:
-        for section in group:
-            current_assignments[section['timeslot']]['rooms'].remove(section['room'])
-            current_assignments[section['timeslot']]['instructors'].remove(section['faculty1'])
-
-    # Check if adding sections from one group to another causes conflicts
-    for group in [section_group_1, section_group_2]:
-        for section in group:
-            if has_conflict(section, current_assignments):
-                return False  # Conflict detected, swap not valid
-
-    return True  # No conflicts, swap is valid
-
-
-
-
-def is_valid_swap(section_group_1, section_group_2, full_schedule):
-    # Function to check if adding a section to the schedule causes a conflict
-    def causes_conflict(new_section, schedule):
-        for existing_section in schedule:
-            if new_section['timeslot'] == existing_section['timeslot']:
-                if new_section['room'] == existing_section['room'] or new_section['faculty1'] == existing_section['faculty1']:
-                    return True  # Conflict found
-        return False  # No conflict
-
-    # Create a temporary schedule excluding the sections from both groups
-    temp_schedule = [section for section in full_schedule if section not in section_group_1 + section_group_2]
-
-    # Check for conflicts after adding each section from both groups to the temporary schedule
-    for section in section_group_1 + section_group_2:
-        if causes_conflict(section, temp_schedule):
-            return False  # Swap causes a conflict
-        else:
-            # Temporarily add the section to the schedule for further conflict checks
-            temp_schedule.append(section)
-
-    return True  # Swap is valid without any conflicts
 
 
 
@@ -1565,10 +1384,6 @@ def is_valid_individual(individual):
 
 
 
-
-
-
-
 def follows_pattern(timeslot, pattern):
     """Check if a timeslot follows a specific pattern (MWF or TuTh)."""
     days = timeslot.split(' - ')[0]
@@ -1577,63 +1392,6 @@ def follows_pattern(timeslot, pattern):
     elif pattern == 'TuTh':
         return all(day in days for day in ['Tu', 'Th'])
     return False
-
-
-
-
-def custom_crossover(ind1, ind2):
-    full_meeting_times = create_full_meeting_times()
-
-    # Group classes by pattern
-    mwf1, tuth1, other1 = group_by_pattern(ind1)
-    mwf2, tuth2, other2 = group_by_pattern(ind2)
-
-
-    if len(mwf1) > 1 and len(mwf2) and  len(tuth1) > 1 and len(tuth2) > 1:
-        # Randomly select crossover points for MWF and TuTh patterns
-        crossover_point_mwf = random.randint(1, min(len(mwf1), len(mwf2)) - 1)
-        crossover_point_tuth = random.randint(1, min(len(tuth1), len(tuth2)) - 1)
-
-        # Swap MWF sections if it results in valid schedules
-        mwf1_new = mwf1[:crossover_point_mwf] + mwf2[crossover_point_mwf:]
-        mwf2_new = mwf2[:crossover_point_mwf] + mwf1[crossover_point_mwf:]
-        
-        cross1=is_valid_individual(mwf1_new + tuth1 + other1)
-        cross2=is_valid_individual(mwf2_new + tuth2 + other2)
-        if cross1[0] and cross2[0]:
-            mwf1, mwf2 = mwf1_new, mwf2_new
-
-        # Swap TuTh sections if it results in valid schedules
-        tuth1_new = tuth1[:crossover_point_tuth] + tuth2[crossover_point_tuth:]
-        tuth2_new = tuth2[:crossover_point_tuth] + tuth1[crossover_point_tuth:]
-        
-        cross3=is_valid_individual(mwf1 + tuth1_new + other1)
-        cross4=is_valid_individual(mwf2 + tuth2_new + other2)
-        if cross3[0] and cross4[0]:
-            tuth1, tuth2 = tuth1_new, tuth2_new
-
-    if len(other1) > 1 and len(other2) > 1:
-    # Swap other classes if it results in valid schedules
-        crossover_point_other = random.randint(1, len(other1))
-        other1_new = other1[:crossover_point_other] + other2[crossover_point_other:]
-        other2_new = other2[:crossover_point_other] + other1[crossover_point_other:]
-        if is_valid_individual(mwf1 + tuth1 + other1_new)[0] and is_valid_individual(mwf2 + tuth2 + other2_new)[0]:
-            other1, other2 = other1_new, other2_new
-
-    # Reconstruct ind1 and ind2 from the modified groups
-    ind1_new = mwf1 + tuth1 + other1
-    ind2_new = mwf2 + tuth2 + other2
-
-    # Invalidate the fitness of the modified individuals
-    del ind1.fitness.values
-    del ind2.fitness.values
-
-    # Update the individuals only if the new combinations are valid
-    ind1[:] = ind1_new
-    ind2[:] = ind2_new
-
-    return ind1, ind2
-
 
 
 
@@ -1683,12 +1441,13 @@ def optimize():
     global global_settings
     data = request.get_json()
     
+    unique_key = str(uuid.uuid4())
+    
     global_settings['class_sections_data'] = data.get('classData', [])
     global_settings['class_penalty'] = data.get('classPenalty', 0)
     global_settings['move_penalty'] = data.get('movePenalty', 0)
     global_settings['blocked_slot_penalty'] = data.get('blockedSlotPenalty', 0)
     global_settings['hold_penalty'] = data.get('holdPenalty', 0)
-
 
 
     class_sections = create_class_sections_from_data(global_settings['class_sections_data'])
@@ -1717,49 +1476,43 @@ def optimize():
     # Combine and expand the schedules
     combined_expanded_schedule = combine_and_expand_schedule(three_credit_results, remaining_class_results, create_full_meeting_times(), class_sections)
 
-    #lets validate the results against he constraints using the GA method
-    
-    failure_report=is_valid_individual(combined_expanded_schedule)
-    
-    # Annotate the combined and expanded schedule with failure reasons
-    annotated_combined_schedule = annotate_failure_reasons(combined_expanded_schedule, failure_report)
-
 
     # use the genetic algorithm evalutaion function to evaluate the schedule
     pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
     pulp_score = pulp_evaluation_results['total_score']
 
-    # Run the genetic algorithm to optimize the schedule further
-    ga_schedules = run_genetic_algorithm(combined_expanded_schedule,failure_report)
     
     #marked_combined_expanded_schedule
+    all_schedules = ({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
 
-    all_schedules = [{'schedule': schedule, 'score': score, 'algorithm': 'GA', 'slot_differences': count_slot_differences(combined_expanded_schedule, schedule)} for schedule, score in ga_schedules]
-    all_schedules.append({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
+    #all_schedules_sorted = sorted(all_schedules, key=lambda x: x['score'])
+    all_schedules_sorted = all_schedules
+    final_schedule = group_and_update_schedule(all_schedules_sorted)
 
-    all_schedules_sorted = sorted(all_schedules, key=lambda x: x['score'])
 
-    calendar_events = []
-    for schedule in all_schedules_sorted:
-        events_for_schedule = process_calendar_data_expanded(schedule['schedule'])
-        calendar_events.append({
-            'schedule_info': schedule,
-            'events': events_for_schedule
-        })
-
-    grouped_schedules = group_and_update_schedule(all_schedules_sorted)
     
     final_results = {
-        'sorted_schedules': grouped_schedules,
+        'unique_key': unique_key,
+        'sorted_schedule': final_schedule,
         'calendar_events': calendar_events,
+        
         'message': 'Optimization completed'
     }
+    
+    write_results_to_json(unique_key, final_results)
 
     return jsonify(final_results)
 
 
+def write_results_to_json(key, results):
+    # Define a directory to store the JSON files
+    directory = 'optimization_results'
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
-from datetime import datetime
+    filepath = os.path.join(directory, f"{key}.json")
+    with open(filepath, 'w') as json_file:
+        json.dump(results, json_file, indent=4)
 
 
 def evaluateSchedule(individual):

@@ -9,7 +9,7 @@ var globalResponse = {};
 function updateCalendar(events) {
     if (calendar) {
         calendar.removeAllEvents(); // Assuming 'removeAllEvents' is the correct method
-        events.events.forEach(event => {
+        events.forEach(event => {
             calendar.addEvent({
                 title: event.section_name +" "+ event.instructor + " (" +  event.room +")", // Assuming 'section_name' is used as the event title
                 start: event.start,
@@ -35,11 +35,11 @@ function updateCalendar(events) {
 
 // Function to load a selected schedule
 function loadSelectedSchedule(val) {
-    if (globalResponse && globalResponse.sorted_schedules && globalResponse.sorted_schedules.length > 0) {
-        $('#scheduleDisplay').html(createResultsTable(globalResponse.sorted_schedules[val])); // Display the schedule
-        updateCalendar(globalResponse.calendar_events[val]); // Update the calendar
-        $('#algorithmType').text(globalResponse.sorted_schedules[val].algorithm);
-        $('#scheduleScore').text(globalResponse.sorted_schedules[val].score);
+    if (globalResponse && globalResponse.sorted_schedule && globalResponse.sorted_schedule.length > 0) {
+        $('#scheduleDisplay').html(createResultsTable(globalResponse.sorted_schedule[val])); // Display the schedule
+        updateCalendar(globalResponse.calendar_events); // Update the calendar
+        $('#algorithmType').text(globalResponse.sorted_schedule[val].algorithm);
+        $('#scheduleScore').text(globalResponse.sorted_schedule[val].score);
     }
 }
 
@@ -391,7 +391,7 @@ $(document).ready(function () {
                 if (response.calendar_events && response.calendar_events.length > 0) {
                     globalResponse = response; // Assign the entire response here
                     // Populate the dropdown with schedules
-                    populateScheduleDropdown(globalResponse.sorted_schedules);
+                    //populateScheduleDropdown(globalResponse.sorted_schedules);
             
                     // Load the first schedule by default
                     loadSelectedSchedule(0);
