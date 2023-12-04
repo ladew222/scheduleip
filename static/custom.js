@@ -11,15 +11,15 @@ function updateCalendar(events) {
         calendar.removeAllEvents(); // Assuming 'removeAllEvents' is the correct method
         events.forEach(event => {
             calendar.addEvent({
-                title: event.section_name +" "+ event.instructor + " (" +  event.room +")", // Assuming 'section_name' is used as the event title
+                title: event.section_name +" "+ event.faculty1 + " (" +  event.room +")", // Assuming 'section_name' is used as the event title
                 start: event.start,
                 location: event.room,
-                description: event.instructor,
+                description: event.faculty1,
                 end: event.end,
                 color: event.color, 
                 extendedProps: {
                     department: 'BioChemistry',
-                    instructor: event.instructor,
+                    instructor: event.faculty1,
                     room: event.room,
                     capacity: event.capacity,
                     buidling: event.bldg,
@@ -140,7 +140,7 @@ $(document).ready(function () {
         },
         // Add the eventDidMount callback for tooltips
         eventDidMount: function(info) {
-            var tooltipContent = `Instructor: ${info.event.extendedProps.instructor} Room: ${info.event.extendedProps.buidling}: ${info.event.extendedProps.room} Capacity: ${info.event.extendedProps.capacity}`;
+            var tooltipContent = `Instructor: ${info.event.extendedProps.faculty1} Room: ${info.event.extendedProps.buidling}: ${info.event.extendedProps.room} Capacity: ${info.event.extendedProps.capacity}`;
             $().tooltip(info.el, {
                 title: tooltipContent,
                 placement: 'top',
