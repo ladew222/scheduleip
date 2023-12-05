@@ -1,0 +1,13 @@
+{
+    "unique_key": "8d6df001-8a32-4897-b27a-ecb13b5e9a0c",
+    "sorted_schedule": [
+        {
+            "schedule": [],
+            "score": 0,
+            "algorithm": "PuLP",
+            "slot_differences": 0
+        }
+    ],
+    "calendar_events": [],
+    "message": "Optimization completed"
+}

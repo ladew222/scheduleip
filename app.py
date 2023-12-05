@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 from collections import Counter
 import uuid
 import os
+from flask import make_response
+from ics import Calendar, Event
+from datetime import datetime, timedelta
+import re
+
 
 global_settings = {}
 results_storage = {}
@@ -1012,10 +1017,10 @@ def process_calendar_data(three_credit_results, remaining_class_results):
     calendar_data = []
     color_cache = {}
 
-    # Assume the current week's Wednesday as a reference date
+    # Assume the current week's Monday as a reference date
     reference_date = datetime.today()
-    while reference_date.weekday() != 2:  # Adjust to the nearest Wednesday
-        reference_date += timedelta(days=1)
+    while reference_date.weekday() != 0:  # Adjust to the nearest Monday
+        reference_date -= timedelta(days=1)
 
     # Define a weekday map
     weekday_map = {'M': 0, 'Tu': 1, 'W': 2, 'Th': 3, 'F': 4}
@@ -1031,7 +1036,8 @@ def process_calendar_data(three_credit_results, remaining_class_results):
             for day in days.split():
                 class_date = get_weekday_date(reference_date, weekday_map[day])
                 start_datetime = datetime.combine(class_date, start_time_obj.time())
-                duration = timedelta(hours=1) if len(days.split()) == 3 else timedelta(hours=1, minutes=30)
+                # Determine the duration based on the days
+                duration = timedelta(hours=1.5 if day in ['Tu', 'Th'] else 1)
                 end_datetime = start_datetime + duration
 
                 # Extract the course prefix and assign color
@@ -1053,6 +1059,13 @@ def process_calendar_data(three_credit_results, remaining_class_results):
 
     return calendar_data
 
+def get_weekday_date(reference_date, target_weekday):
+    """
+    Get the date for the target weekday based on the reference date (which is a Monday).
+    """
+    reference_weekday = reference_date.weekday()  # Monday is 0, Sunday is 6
+    days_difference = target_weekday - reference_weekday
+    return reference_date + timedelta(days=days_difference)
 
 def combine_and_expand_schedule(three_credit_results, remaining_class_results, meeting_times, class_sections):
     combined_schedule = []
@@ -1435,6 +1448,104 @@ def count_slot_differences(pulp_schedule, ga_schedule):
 
     return differences
 
+
+@app.route('/get_ical', methods=['GET'])
+def get_ical():
+    key = request.args.get('key')
+    file_path = f'optimization_results/{key}.json'
+    
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'Invalid or missing key'}), 400
+
+    with open(file_path, 'r') as json_file:
+        data = json.load(json_file)
+        schedule = data['sorted_schedule']
+
+    ical_content = convert_schedule_to_ical(schedule)
+
+    response = make_response(ical_content)
+    response.headers["Content-Disposition"] = f"attachment; filename=schedule_{key}.ics"
+    response.headers["Content-Type"] = "text/calendar"
+    return response
+
+
+def weekday_to_date(start_date, weekday):
+    weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+    start_weekday = start_date_obj.weekday()
+    target_weekday = weekdays.index(weekday)
+    days_to_add = (target_weekday - start_weekday) % 7
+    return (start_date_obj + timedelta(days=days_to_add)).date()
+
+def convert_schedule_to_ical(schedules, start_date=None, end_date=None):
+    cal = Calendar()
+    schedule = schedules[0]['schedule']
+
+    days_map = {'M': 'Monday', 'Tu': 'Tuesday', 'W': 'Wednesday', 'Th': 'Thursday', 'F': 'Friday'}
+    day_durations = {'Tu': timedelta(hours=1, minutes=30), 'Th': timedelta(hours=1, minutes=30), 'M': timedelta(hours=1), 'W': timedelta(hours=1), 'F': timedelta(hours=1)}
+
+    if not start_date:
+        start_date = datetime.today().strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = (datetime.today() + timedelta(weeks=16)).strftime("%Y-%m-%d")
+
+    for entry in schedule:
+        days, time_str = entry['timeslot'].split(' - ')
+        start_time = datetime.strptime(time_str, '%I:%M%p').time()
+        for day_code in days.split():
+            day_name = days_map.get(day_code)
+            if day_name:
+                duration = day_durations.get(day_code, timedelta(hours=1))
+                end_time = (datetime.combine(datetime.today(), start_time) + duration).time()
+                first_event_date = weekday_to_date(start_date, day_name)
+
+                event = Event()
+                event.name = f"{entry['section']}"
+                event.begin = datetime.combine(first_event_date, start_time)
+                event.end = datetime.combine(first_event_date, end_time)
+                event.location = entry['bldg'] + " " + entry['room']
+                subject = entry['section'].split('-')[0]
+                event.categories = subject
+                event.classification = subject
+                event.organizer = entry['faculty1']
+                event.description = f"Instructor:{entry['faculty1']} Capacity: {entry['secCap']} with Min-credits: {entry['minCredit']}"
+
+                event.recurring = True
+                event.recurrences = f"FREQ=WEEKLY;UNTIL={end_date.replace('-', '')}"
+
+                cal.events.add(event)
+
+    return str(cal)
+
+
+@app.route('/get_csv', methods=['GET'])
+def get_csv():
+    key = request.args.get('key')
+    file_path = f'optimization_results/{key}.json'
+    
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'Invalid or missing key'}), 400
+
+    with open(file_path, 'r') as json_file:
+        data = json.load(json_file)
+        schedule = data['sorted_schedule']
+
+    csv_content = convert_schedule_to_csv(schedule)
+
+    response = make_response(csv_content)
+    response.headers["Content-Disposition"] = f"attachment; filename=schedule_{key}.csv"
+    response.headers["Content-Type"] = "text/csv"
+    return response
+
+def convert_schedule_to_csv(schedule):
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Section', 'Timeslot', 'Faculty', 'Room', 'Building'])  # Add other headers as needed
+    for entry in schedule:
+        cw.writerow([entry['section'], entry['timeslot'], entry['faculty1'], entry['room'], entry['bldg']])  # Match with your data structure
+    return si.getvalue()
+
+
 @app.route('/optimize', methods=['POST'])
 def optimize():
     
@@ -1478,8 +1589,8 @@ def optimize():
 
 
     # use the genetic algorithm evalutaion function to evaluate the schedule
-    pulp_evaluation_results = evaluateSchedule(combined_expanded_schedule)
-    pulp_score = pulp_evaluation_results['total_score']
+    
+    pulp_score = 100
 
     
     #marked_combined_expanded_schedule
@@ -1513,124 +1624,6 @@ def write_results_to_json(key, results):
     filepath = os.path.join(directory, f"{key}.json")
     with open(filepath, 'w') as json_file:
         json.dump(results, json_file, indent=4)
-
-
-def evaluateSchedule(individual):
-    # Define penalties
-    overlap_penalty = 300
-    instructor_conflict_penalty = 300
-    room_conflict_penalty = 300
-    proximity_penalty = 2
-    unwanted_timeslot_penalty = 3
-    pattern_violation_penalty = 300
-    mutual_exclusion_penalty = 2
-    same_day_penalty = 300
-
-    # Initialize scoring variables
-    total_score = 0
-    detailed_scores = {}
-    class_timings = {}
-    class_days = {}
-
-    # Function to check if the class follows the MWF or TuTh pattern
-    def follows_desired_pattern(course_identifier, timeslots):
-        mwf_count = sum(['M' in ts and 'W' in ts and 'F' in ts for ts in timeslots])
-        tuth_count = sum(['Tu' in ts and 'Th' in ts for ts in timeslots])
-
-        # For 3-credit classes, either 2 TuTh or 3 MWF slots are acceptable
-        if course_identifier.endswith('_3'):
-            return (mwf_count == 3 and len(timeslots) >= 3) or (tuth_count == 2 and len(timeslots) >= 2)
-        else:
-            return mwf_count == len(timeslots) or tuth_count == len(timeslots)
-
-    # Evaluate each class meeting
-    for i, meeting in enumerate(individual):
-        class_score = 0
-        overlap_violations = 0
-        instructor_conflicts = 0
-        room_conflicts = 0
-        proximity_issues = 0
-        unwanted_timeslot_violations = 0
-        mutual_exclusion_violations = 0
-
-        # Store timing and days for classes 3+ credits
-        if int(meeting['minCredit']) >= 3:
-            course_identifier = meeting['section'].split('_')[0]
-            class_timings.setdefault(course_identifier, set()).add(meeting['timeslot'])
-            days = meeting['timeslot'].split(' - ')[0]
-            class_days.setdefault(course_identifier, set()).update(days.split())
-
-        # Check for overlaps, conflicts, and violations
-        for j, other_meeting in enumerate(individual):
-            if i != j:
-                if meeting['timeslot'] == other_meeting['timeslot']:
-                    overlap_violations += 1
-                    if meeting['room'] == other_meeting['room']:
-                        room_conflicts += 1
-                    if meeting['faculty1'] == other_meeting['faculty1']:
-                        instructor_conflicts += 1
-
-                # Mutual exclusion violations
-                mutually_exclusive_sections = meeting.get('avoid_classes', [])
-                if other_meeting['section'] in mutually_exclusive_sections:
-                    mutual_exclusion_violations += 1
-
-        # Proximity issues for 1-credit classes
-        if meeting['minCredit'] == '1' and meeting['section'].endswith("_one_credit"):
-            base_sec_name = meeting['section'][:-11]
-            three_credit_class_meetings = [s for s in individual if s['section'] == base_sec_name]
-            for cls_3_meeting in three_credit_class_meetings:
-                time_diff = abs((datetime.strptime(meeting['timeslot'].split(' - ')[1], '%I:%M%p') - 
-                                 datetime.strptime(cls_3_meeting['timeslot'].split(' - ')[1], '%I:%M%p')).total_seconds()) / 3600
-                if time_diff > 2:
-                    proximity_issues += 1
-
-        # Unwanted timeslot violations
-        for unwanted_timeslot in meeting.get('unwanted_timeslots', []):
-            unwanted_days, unwanted_time = unwanted_timeslot.split(' - ')
-            if unwanted_days in meeting['timeslot'] and unwanted_time == meeting['timeslot'].split(' - ')[1]:
-                unwanted_timeslot_violations += 1
-
-        # Calculate score for this class meeting
-        class_score = (overlap_violations * overlap_penalty +
-                       instructor_conflicts * instructor_conflict_penalty +
-                       room_conflicts * room_conflict_penalty +
-                       proximity_issues * proximity_penalty +
-                       unwanted_timeslot_violations * unwanted_timeslot_penalty +
-                       mutual_exclusion_violations * mutual_exclusion_penalty)
-
-        # Update total score and details
-        total_score += class_score
-        detailed_scores[meeting['section']] = {
-            'score': class_score,
-            'overlap_violations': overlap_violations,
-            'instructor_conflicts': instructor_conflicts,
-            'room_conflicts': room_conflicts,
-            'proximity_issues': proximity_issues,
-            'unwanted_timeslot_violations': unwanted_timeslot_violations,
-            'mutual_exclusion_violations': mutual_exclusion_violations
-        }
-
-    # Check for pattern matching and same day violations
-    for course, timeslots in class_timings.items():
-        if not follows_desired_pattern(course, timeslots):
-            pattern_violation = pattern_violation_penalty * len(timeslots)
-            total_score += pattern_violation
-            for section in detailed_scores:
-                if section.startswith(course):
-                    detailed_scores[section]['pattern_violation'] = pattern_violation
-        
-        # Same day violations
-        if len(class_days[course]) < len(timeslots):
-            same_day_violation = same_day_penalty * (len(timeslots) - len(class_days[course]))
-            total_score += same_day_violation
-            for section in detailed_scores:
-                if section.startswith(course):
-                    detailed_scores[section].setdefault('same_day_violation', 0)
-                    detailed_scores[section]['same_day_violation'] += same_day_violation
-
-    return {'total_score': total_score, 'detailed_scores': detailed_scores}
-
 
 
 def divide_schedules_by_credit(schedule, credit_threshold=3):

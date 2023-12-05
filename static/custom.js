@@ -85,6 +85,8 @@ function downloadCSV(csvContent, fileName) {
 
 
 
+
+
 // Function to create an HTML table from the result array
 function createResultsTable(data) {
     let table = '<table style="width:100%; border-collapse: collapse; border: 1px solid #ddd;">';
@@ -119,6 +121,32 @@ $(document).ready(function () {
         var selectedScheduleIndex = $(this).val();
         loadSelectedSchedule(selectedScheduleIndex);
     });
+
+    $('#download-csv').click(function(e) {
+        e.preventDefault();
+        key = globalResponse.unique_key``
+        downloadFile('/get_csv', key, 'schedule.csv');
+    });
+
+    $('#download-ical').click(function(e) {
+        key = globalResponse.unique_key;
+        e.preventDefault();
+        downloadFile('/get_ical', key, 'schedule.ics');
+    });
+
+    function downloadFile(url, key, filename) {
+        $.get(url, { key: key }, function(data) {
+            var blob = new Blob([data], { type: 'text/plain' });
+            var downloadUrl = URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(downloadUrl);
+            a.remove();
+        });
+    }
 
 
     // Hold All Button Click Event
