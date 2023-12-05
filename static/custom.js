@@ -168,7 +168,7 @@ $(document).ready(function () {
         },
         // Add the eventDidMount callback for tooltips
         eventDidMount: function(info) {
-            var tooltipContent = `Instructor: ${info.event.extendedProps.faculty1} Room: ${info.event.extendedProps.buidling}: ${info.event.extendedProps.room} Capacity: ${info.event.extendedProps.capacity}`;
+            var tooltipContent = `Instructor: ${info.event.extendedProps.instructor} Room: ${info.event.extendedProps.buidling}: ${info.event.extendedProps.room} Department: ${info.event.extendedProps.department}`;
             $().tooltip(info.el, {
                 title: tooltipContent,
                 placement: 'top',
