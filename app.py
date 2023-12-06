@@ -1520,20 +1520,26 @@ def convert_schedule_to_ical(schedules, start_date=None, end_date=None):
     return str(cal)
 
 def validate_csv_for_class_section(csv_data):
-    required_columns = ['sec_name', 'title', 'minCredit', 'sec_cap', 'room', 'bldg', 'week_days', 'csm_start', 'csm_end', 'faculty1']
-    optional_columns = ['holdValue', 'restrictions', 'blocked_time_slots', 'assigned_meeting_time_indices']
+    required_columns = ['section', 'title', 'minCredit', 'secCap', 'room', 'bldg', 'weekDays', 'csmStart', 'csmEnd', 'faculty1']
+    optional_columns = ['hold', 'restrictions', 'blockedTimeSlots', 'weekDays']
 
-    try:
-        df = pd.read_csv(StringIO(csv_data))
-        missing_columns = [col for col in required_columns if col not in df.columns]
+    # Check if the list is not empty and is a list of dictionaries
+    if not csv_data or not isinstance(csv_data, list) or not all(isinstance(item, dict) for item in csv_data):
+        return "CSV data is empty or not in the expected format (list of dictionaries).", False
 
-        if missing_columns:
-            return f"Missing required columns: {', '.join(missing_columns)}", False
+    # Check if there's at least one row in the data
+    if not csv_data:
+        return "CSV data is empty.", False
 
-        return "CSV is valid for ClassSection.", True
+    # Check the keys in the first row (dictionary) of csv_data
+    first_row_keys = csv_data[0].keys()
+    missing_columns = [col for col in required_columns if col not in first_row_keys]
+    
+    if missing_columns:
+        return f"Missing required columns: {', '.join(missing_columns)}", False
 
-    except Exception as e:
-        return f"Error processing CSV data: {str(e)}", False
+    return "CSV data is valid for ClassSection.", True
+
 
 
 @app.route('/get_csv', methods=['GET'])
@@ -1614,7 +1620,7 @@ def optimize():
 
         # use the genetic algorithm evalutaion function to evaluate the schedule
         
-        pulp_score = 100
+        pulp_score = "Successfully optimized"
 
         
         #marked_combined_expanded_schedule

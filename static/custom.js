@@ -412,23 +412,32 @@ $(document).ready(function () {
             data: JSON.stringify(requestData),
             contentType: 'application/json',
             success: function (response) {
-                console.log('Optimization successful:', response);
-                $("#optimization-results").fadeIn(1000); // Fade in slowly over 1 second
-                $("#class-table").fadeOut(1000); // Fade out slowly over 1 second
-                // Check if multiple schedules are returned
-                if (response.calendar_events && response.calendar_events.length > 0) {
-                    globalResponse = response; // Assign the entire response here
-                    // Populate the dropdown with schedules
-                    //populateScheduleDropdown(globalResponse.sorted_schedules);
-            
-                    // Load the first schedule by default
-                    loadSelectedSchedule(0);
-                    
+                if (response.message == "Optimization completed") {
+                    $('#scheduleScore').text(response.message);
+                    console.log('Optimization successful:', response);
+                    $("#optimization-results").fadeIn(1000); // Fade in slowly over 1 second
+                    $("#class-table").fadeOut(1000); // Fade out slowly over 1 second
+                    // Check if multiple schedules are returned
+                    if (response.calendar_events && response.calendar_events.length > 0) {
+                        globalResponse = response; // Assign the entire response here
+                        // Populate the dropdown with schedules
+                        //populateScheduleDropdown(globalResponse.sorted_schedules);
+                
+                        // Load the first schedule by default
+                        loadSelectedSchedule(0);
+                        
+                    } else {
+                        console.error('No schedules in response');
+                        $('#scheduleScore').text("No schedules in response");
+                    }
                 } else {
-                    console.error('No schedules in response');
+                    console.error('Optimization failed:', response);
+                    $('#scheduleScore').text('Optimization failed:'+ response.message);
                 }
+                
             },
             error: function (error) {
+                $('#scheduleScore').text('Optimization failed:'+ error);
                 console.error('Error:', error);
             },
         });
