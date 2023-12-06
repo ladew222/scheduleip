@@ -23,6 +23,8 @@ from flask import make_response
 from ics import Calendar, Event
 from datetime import datetime, timedelta
 import re
+import pandas as pd
+from io import StringIO
 
 
 global_settings = {}
@@ -1517,6 +1519,22 @@ def convert_schedule_to_ical(schedules, start_date=None, end_date=None):
 
     return str(cal)
 
+def validate_csv_for_class_section(csv_data):
+    required_columns = ['sec_name', 'title', 'minCredit', 'sec_cap', 'room', 'bldg', 'week_days', 'csm_start', 'csm_end', 'faculty1']
+    optional_columns = ['holdValue', 'restrictions', 'blocked_time_slots', 'assigned_meeting_time_indices']
+
+    try:
+        df = pd.read_csv(StringIO(csv_data))
+        missing_columns = [col for col in required_columns if col not in df.columns]
+
+        if missing_columns:
+            return f"Missing required columns: {', '.join(missing_columns)}", False
+
+        return "CSV is valid for ClassSection.", True
+
+    except Exception as e:
+        return f"Error processing CSV data: {str(e)}", False
+
 
 @app.route('/get_csv', methods=['GET'])
 def get_csv():
@@ -1548,71 +1566,83 @@ def convert_schedule_to_csv(schedule):
 
 @app.route('/optimize', methods=['POST'])
 def optimize():
+    try:
     
-    global global_settings
-    data = request.get_json()
-    
-    unique_key = str(uuid.uuid4())
-    
-    global_settings['class_sections_data'] = data.get('classData', [])
-    global_settings['class_penalty'] = data.get('classPenalty', 0)
-    global_settings['move_penalty'] = data.get('movePenalty', 0)
-    global_settings['blocked_slot_penalty'] = data.get('blockedSlotPenalty', 0)
-    global_settings['hold_penalty'] = data.get('holdPenalty', 0)
-
-
-    class_sections = create_class_sections_from_data(global_settings['class_sections_data'])
-    
-    # Convert class section instances to dictionaries
-    class_sections_dictionaries = [class_section.to_dictionary() for class_section in class_sections]
-
-    three_credit_sections, remaining_class_sections =  split_class_sections(class_sections_dictionaries)
-
-    # Optimize the 3-credit classes with Pulp
-    three_credit_results = optimize_schedule(three_credit_sections)
-
-    # Create a set of used timeslots
-    used_timeslots = set()
-    for section in three_credit_results['scheduled_sections']:
-        used_timeslots.add(section['timeslot'])
+        global global_settings
+        data = request.get_json()
         
-    # Calculate remaining timeslots
-    all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
-    remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
-
-    # Optimize the remaining classes with Pulp
-    remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, used_timeslots)
-    calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
-
-    # Combine and expand the schedules
-    combined_expanded_schedule = combine_and_expand_schedule(three_credit_results, remaining_class_results, create_full_meeting_times(), class_sections)
-
-
-    # use the genetic algorithm evalutaion function to evaluate the schedule
-    
-    pulp_score = 100
-
-    
-    #marked_combined_expanded_schedule
-    all_schedules = ({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
-
-    #all_schedules_sorted = sorted(all_schedules, key=lambda x: x['score'])
-    all_schedules_sorted = all_schedules
-    final_schedule = group_and_update_schedule(all_schedules_sorted)
-
-
-    
-    final_results = {
-        'unique_key': unique_key,
-        'sorted_schedule': final_schedule,
-        'calendar_events': calendar_events,
+        unique_key = str(uuid.uuid4())
         
-        'message': 'Optimization completed'
-    }
-    
-    write_results_to_json(unique_key, final_results)
+        global_settings['class_sections_data'] = data.get('classData', [])
+        global_settings['class_penalty'] = data.get('classPenalty', 0)
+        global_settings['move_penalty'] = data.get('movePenalty', 0)
+        global_settings['blocked_slot_penalty'] = data.get('blockedSlotPenalty', 0)
+        global_settings['hold_penalty'] = data.get('holdPenalty', 0)
+        
+        
+        message, is_valid = validate_csv_for_class_section(global_settings['class_sections_data'])
+        
+        if not is_valid:
+            return jsonify({'message':  message }), 400
 
-    return jsonify(final_results)
+        class_sections = create_class_sections_from_data(global_settings['class_sections_data'])
+        
+        # Convert class section instances to dictionaries
+        class_sections_dictionaries = [class_section.to_dictionary() for class_section in class_sections]
+
+        three_credit_sections, remaining_class_sections =  split_class_sections(class_sections_dictionaries)
+
+        # Optimize the 3-credit classes with Pulp
+        three_credit_results = optimize_schedule(three_credit_sections)
+
+        # Create a set of used timeslots
+        used_timeslots = set()
+        for section in three_credit_results['scheduled_sections']:
+            used_timeslots.add(section['timeslot'])
+            
+        # Calculate remaining timeslots
+        all_timeslots = [f"{day} - {mt['start_time']}" for mt in create_full_meeting_times() for day in mt['days'].split()]
+        remaining_timeslots = [ts for ts in all_timeslots if ts not in used_timeslots]
+
+        # Optimize the remaining classes with Pulp
+        remaining_class_results = optimize_remaining_classes(remaining_class_sections, remaining_timeslots, used_timeslots)
+        calendar_events = process_calendar_data(three_credit_results, remaining_class_results)
+
+        # Combine and expand the schedules
+        combined_expanded_schedule = combine_and_expand_schedule(three_credit_results, remaining_class_results, create_full_meeting_times(), class_sections)
+
+
+        # use the genetic algorithm evalutaion function to evaluate the schedule
+        
+        pulp_score = 100
+
+        
+        #marked_combined_expanded_schedule
+        all_schedules = ({'schedule': combined_expanded_schedule, 'score': pulp_score, 'algorithm': 'PuLP', 'slot_differences': 0})
+
+        #all_schedules_sorted = sorted(all_schedules, key=lambda x: x['score'])
+        all_schedules_sorted = all_schedules
+        final_schedule = group_and_update_schedule(all_schedules_sorted)
+
+
+        
+        final_results = {
+            'unique_key': unique_key,
+            'sorted_schedule': final_schedule,
+            'calendar_events': calendar_events,
+            
+            'message': 'Optimization completed'
+        }
+        
+        write_results_to_json(unique_key, final_results)
+
+        return jsonify(final_results)
+
+    except Exception as e:
+            # Handle specific exceptions or general exceptions
+            error_message = f"Error: {str(e)}"  # Format the message based on the exception type
+            return jsonify({'message': error_message}), 400
+
 
 
 def write_results_to_json(key, results):
